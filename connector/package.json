@@ -1,0 +1,13 @@
+{
+  "name": "officebridge-connector",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OfficeBridge connector — run this inside your own network. Outbound-only WSS tunnel to the OfficeBridge relay.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}

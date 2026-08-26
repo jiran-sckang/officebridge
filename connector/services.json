@@ -1,0 +1,14 @@
+{
+  "erp": {
+    "internalAddress": "https://erp.jiran.com",
+    "enabled": true
+  },
+  "gitlab": {
+    "internalAddress": "https://git.jiransoft.co.kr",
+    "enabled": true
+  },
+  "groupware": {
+    "internalAddress": "http://127.0.0.1:8083",
+    "enabled": true
+  }
+}
