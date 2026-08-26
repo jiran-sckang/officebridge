@@ -1,0 +1,9 @@
+{
+  "name": "officebridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OfficeBridge prototype relay (ZTNA gateway)",
+  "dependencies": {
+    "ws": "^8.16.0"
+  }
+}
