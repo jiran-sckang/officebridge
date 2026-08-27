@@ -23,6 +23,7 @@ const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
 // /_ob/api/connector/register respectively.
 const DOWNLOADABLE_FILES = {
   'officebridge-bridge-mac.zip': 'application/zip',
+  'officebridge-bridge-win.zip': 'application/zip',
   'officebridge-connector-app-mac.zip': 'application/zip',
   'officebridge-connector-app-win.zip': 'application/zip',
 };

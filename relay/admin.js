@@ -739,20 +739,6 @@ function fileSizeLabel(fileName) {
   }
 }
 
-function downloadCard({ title, desc, fileName, steps }) {
-  const size = fileSizeLabel(fileName);
-  const stepsHtml = steps.map((s) => `<li>${s}</li>`).join('');
-  return `
-    <div class="card">
-      <div style="font-weight:700;font-size:15px;margin-bottom:4px">${title}</div>
-      <div style="color:var(--muted);font-size:13px;margin-bottom:14px">${desc}</div>
-      ${size
-        ? `<a class="btn" href="/_ob/downloads/${fileName}" style="display:inline-block;text-decoration:none">다운로드 (${size})</a>`
-        : `<span class="tag-deny">아직 서버에 파일이 없습니다 (downloads/${fileName})</span>`}
-      <ol style="margin-top:16px;padding-left:20px;font-size:13px;color:var(--text)">${stepsHtml}</ol>
-    </div>`;
-}
-
 const PLATFORM_ICON = {
   windows: '<svg viewBox="0 0 24 24" width="30" height="30"><rect x="2" y="2" width="9" height="9" fill="#fff"/><rect x="13" y="2" width="9" height="9" fill="#fff"/><rect x="2" y="13" width="9" height="9" fill="#fff"/><rect x="13" y="13" width="9" height="9" fill="#fff"/></svg>',
   apple: '<svg viewBox="0 0 384 512" width="26" height="26" fill="#fff"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>',
@@ -771,17 +757,24 @@ function platformTile({ label, icon, fileName, bg }) {
 }
 
 function renderDownloads(session) {
-  const bridgeCard = downloadCard({
-    title: '임직원용 브릿지 앱',
-    desc: `일반 임직원이 자기 컴퓨터에 설치하는 앱입니다. 누구나 같은 파일을 받아 쓸 수 있고, 개인 설정파일은 필요 없습니다 — 최초 실행 시 본인이 회사코드(${TENANT_NAME})·이메일·비밀번호로 직접 인증합니다.`,
-    fileName: 'officebridge-bridge-mac.zip',
-    steps: [
-      '앱을 Applications 폴더로 이동 후 실행 (우클릭 → 열기)',
-      `최초 실행 시 뜨는 화면에서 회사코드 "${TENANT_NAME}"와 본인의 포털 계정(이메일/비밀번호)으로 인증`,
-      '한 번 인증하면 그 뒤로는 로그인 없이 메뉴바에서 본인이 접근 가능한 시스템만 바로 클릭해서 접속',
-      '퇴사·기기 분실 시 [조직도]에서 "접근 회수"를 누르면 그 앱은 즉시 무효화됨',
-    ],
-  });
+  const bridgeCard = `
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">임직원용 브릿지 앱</div>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:14px">
+        일반 임직원이 자기 컴퓨터에 설치하는 앱입니다. 누구나 같은 파일을 받아 쓸 수 있고, 개인 설정파일은 필요 없습니다 —
+        최초 실행 시 본인이 회사코드(${TENANT_NAME})·이메일·비밀번호로 직접 인증합니다.
+      </div>
+      <div class="platform-grid">
+        ${platformTile({ label: 'Windows', icon: PLATFORM_ICON.windows, fileName: 'officebridge-bridge-win.zip', bg: '#0c51a1' })}
+        ${platformTile({ label: 'Mac OS', icon: PLATFORM_ICON.apple, fileName: 'officebridge-bridge-mac.zip', bg: '#334155' })}
+      </div>
+      <ol style="margin-top:4px;padding-left:20px;font-size:13px;color:var(--text)">
+        <li>압축을 풀고 실행 (Mac: 우클릭 → 열기 / Windows: SmartScreen 경고가 뜨면 "추가 정보" → "실행")</li>
+        <li>최초 실행 시 뜨는 화면에서 회사코드 "${TENANT_NAME}"와 본인의 포털 계정(이메일/비밀번호)으로 인증</li>
+        <li>한 번 인증하면 그 뒤로는 로그인 없이 메뉴바(트레이)에서 본인이 접근 가능한 시스템만 바로 클릭해서 접속</li>
+        <li>퇴사·기기 분실 시 [조직도]에서 "접근 회수"를 누르면 그 앱은 즉시 무효화됨</li>
+      </ol>
+    </div>`;
 
   return adminShell('/downloads', session, '설치 파일', `
     <div style="margin-bottom:16px;color:var(--muted);font-size:13px">
