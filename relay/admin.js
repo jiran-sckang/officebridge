@@ -262,6 +262,7 @@ const RULE_LABELS = {
   loginLockout: '로그인 연속 실패 계정 잠금',
   sessionMaxAge: '세션 최대 수명 제한',
   endpointSecurityScore: '엔드포인트 연동 (OfficeKeeper PC 보안점수) — UI만 구현, 판정 로직 연동 예정',
+  bridgeOnlyAccess: '포털(웹) 로그인 제한 — 켜면 일반 임직원은 브릿지 앱으로만 접속 가능 (관리자는 항상 웹 로그인 가능)',
 };
 
 function renderPolicyRules(session) {

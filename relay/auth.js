@@ -69,6 +69,12 @@ function login(email, password, ip) {
   const user = users[email];
   if (!user) return { ok: false, reason: '존재하지 않는 계정입니다.' };
   if (user.blocked) return { ok: false, reason: '차단된 계정입니다. 관리자에게 문의하세요.' };
+  // Admins always keep web access — otherwise turning this rule on could
+  // lock everyone, including the admin who'd need to turn it back off,
+  // out of the console at the same time.
+  if (rules.getConfig().bridgeOnlyAccess.enabled && user.role !== 'admin') {
+    return { ok: false, reason: '포털(웹) 로그인이 제한되어 있습니다. OfficeBridge 브릿지 앱으로 접속해주세요.' };
+  }
   if (isLocked(user)) {
     const mins = Math.ceil((user.lockedUntil - Date.now()) / 60000);
     return { ok: false, reason: `로그인 연속 실패로 계정이 잠겼습니다. 약 ${mins}분 후 다시 시도하세요.` };

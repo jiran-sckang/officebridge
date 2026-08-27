@@ -1,8 +1,33 @@
 {
-  "businessHours": { "enabled": false, "startHour": 9, "endHour": 18 },
-  "rateLimit": { "enabled": true, "maxRequests": 30, "windowSeconds": 10 },
-  "sessionIpPin": { "enabled": true },
-  "loginLockout": { "enabled": true, "maxFailures": 5, "windowMinutes": 10, "lockMinutes": 10 },
-  "sessionMaxAge": { "enabled": true, "maxHours": 8 },
-  "endpointSecurityScore": { "enabled": false, "uiOnly": true, "minScore": 80 }
+  "businessHours": {
+    "enabled": false,
+    "startHour": 9,
+    "endHour": 18
+  },
+  "rateLimit": {
+    "enabled": true,
+    "maxRequests": 30,
+    "windowSeconds": 10
+  },
+  "sessionIpPin": {
+    "enabled": true
+  },
+  "loginLockout": {
+    "enabled": true,
+    "maxFailures": 5,
+    "windowMinutes": 10,
+    "lockMinutes": 10
+  },
+  "sessionMaxAge": {
+    "enabled": true,
+    "maxHours": 8
+  },
+  "endpointSecurityScore": {
+    "enabled": false,
+    "uiOnly": true,
+    "minScore": 80
+  },
+  "bridgeOnlyAccess": {
+    "enabled": false
+  }
 }
