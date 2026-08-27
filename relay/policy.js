@@ -51,6 +51,17 @@ function getDeptPolicy() {
   return deptPolicy;
 }
 
+// Called when the org chart page creates an employee in a department that's
+// never been seen before, so it shows up as a manageable row in the policy
+// screen immediately (with zero services granted) instead of silently
+// having no policy at all until an admin happens to toggle something.
+function ensureDept(dept) {
+  if (deptPolicy[dept]) return deptPolicy[dept];
+  deptPolicy[dept] = [];
+  persistDeptPolicy();
+  return deptPolicy[dept];
+}
+
 function toggleDeptAccess(dept, serviceName, allow) {
   const set = new Set(deptPolicy[dept] || []);
   if (allow) set.add(serviceName);
@@ -81,6 +92,7 @@ module.exports = {
   effectiveServices,
   isAllowed,
   getDeptPolicy,
+  ensureDept,
   toggleDeptAccess,
   getGrants,
   toggleIndividualGrant,

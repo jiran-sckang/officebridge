@@ -16,6 +16,12 @@ const { loginPage, blockPage } = require('./theme');
 const { DOMAIN, PORT, COOKIE_NAME } = require('./config');
 
 const CERT_DIR = path.join(__dirname, '..', 'certs');
+const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
+const DOWNLOADABLE_FILES = {
+  'connector-kit.zip': 'application/zip',
+  'officebridge-connector-mac.zip': 'application/zip',
+  'officebridge-bridge-mac.zip': 'application/zip',
+};
 
 // ---- small HTTP helpers ------------------------------------------------
 
@@ -157,6 +163,51 @@ async function handleInternal(req, res, ctx) {
     return;
   }
 
+  // F-11 개인 브릿지: exchanges a personal bridge token (issued from the org
+  // chart page) for a real session — no password, but otherwise identical to
+  // a normal login. Public by design: the token itself is the credential.
+  if (pathname === '/_ob/api/bridge/exchange' && req.method === 'POST') {
+    let body;
+    try {
+      body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+    } catch {
+      res.writeHead(400);
+      return res.end('bad request');
+    }
+    const result = auth.exchangeBridgeToken(body.token, ip);
+    if (!result.ok) {
+      audit.log({ type: 'LOGIN', verdict: 'FAIL', user: '-', service: '-', ip, reason: `개인 브릿지 토큰 인증 실패: ${result.reason}` });
+      res.writeHead(401);
+      return res.end('unauthorized');
+    }
+    audit.log({ type: 'LOGIN', verdict: 'OK', user: result.email, service: '-', ip, reason: '개인 브릿지 로그인' });
+    const allowed = policy.effectiveServices(result.user);
+    const services = Object.entries(policy.getServices())
+      .filter(([name]) => allowed.has(name))
+      .map(([name, s]) => ({ name, label: s.label, url: `https://${name}.${DOMAIN}/` }));
+    return sendJson(res, 200, {
+      sessionId: result.sessionId,
+      name: result.user.name,
+      dept: result.user.dept,
+      services,
+    });
+  }
+
+  // Hands a session already created via the bridge exchange above to the
+  // browser as a cookie, then redirects on — the bridge app never handles
+  // the browser's cookie jar directly, it just opens this URL.
+  if (pathname === '/_ob/bridge-enter') {
+    const sid = parsedUrl.searchParams.get('sid');
+    const session = auth.getSession(sid);
+    if (!session) {
+      return sendBlockPage(res, 401, { code: 401, title: '세션 만료', message: '브릿지 세션이 유효하지 않습니다. 앱에서 다시 시도해주세요.' });
+    }
+    setCookie(res, sid);
+    const next = parsedUrl.searchParams.get('next') || `https://portal.${DOMAIN}/`;
+    res.writeHead(302, { Location: next });
+    return res.end();
+  }
+
   // Connector-facing read-only API: auth is the shared connector token (the
   // same one used to open the tunnel), not a browser session, since the
   // caller is the connector's own local admin web UI, not a logged-in user.
@@ -176,6 +227,59 @@ async function handleInternal(req, res, ctx) {
     }
     res.writeHead(404);
     return res.end('not found');
+  }
+
+  // Personal bridge app config — generated on the fly per employee, not a
+  // file on disk. Admin-only: only an admin should be handing these out.
+  if (pathname === '/_ob/downloads/bridge-config') {
+    const session = auth.getSession(sessionId);
+    if (!session || session.role !== 'admin') {
+      res.writeHead(403);
+      return res.end('forbidden');
+    }
+    const email = parsedUrl.searchParams.get('email');
+    const token = auth.getBridgeTokenFor(email);
+    if (!token) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('이 임직원에게 발급된 브릿지 토큰이 없습니다.');
+    }
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 설정파일 다운로드: ${email}` });
+    const config = JSON.stringify({ relayDomain: DOMAIN, bridgeToken: token }, null, 2);
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Disposition': `attachment; filename="officebridge-bridge-config.json"`,
+    });
+    return res.end(config);
+  }
+
+  // Admin-only file downloads (connector install packages). Gated by
+  // session, not by the /_ob/api/admin/ token dispatch below, since these
+  // aren't form-post actions — they stream a binary response.
+  if (pathname.startsWith('/_ob/downloads/')) {
+    const session = auth.getSession(sessionId);
+    if (!session || session.role !== 'admin') {
+      res.writeHead(403);
+      return res.end('forbidden');
+    }
+    const fileName = pathname.replace('/_ob/downloads/', '');
+    const contentType = DOWNLOADABLE_FILES[fileName];
+    if (!contentType) {
+      res.writeHead(404);
+      return res.end('not found');
+    }
+    const filePath = path.join(DOWNLOADS_DIR, fileName);
+    if (!fs.existsSync(filePath)) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('파일이 아직 서버에 준비되지 않았습니다.');
+    }
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `커넥터 설치파일 다운로드: ${fileName}` });
+    const stat = fs.statSync(filePath);
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': stat.size,
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+    });
+    return fs.createReadStream(filePath).pipe(res);
   }
 
   if (pathname.startsWith('/_ob/api/admin/')) {

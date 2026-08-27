@@ -1,6 +1,22 @@
 {
-  "영업팀": ["erp", "groupware"],
-  "개발팀": ["gitlab", "groupware"],
-  "인사팀": ["erp", "groupware"],
-  "보안팀": ["erp", "gitlab", "groupware"]
+  "영업팀": [
+    "erp",
+    "groupware"
+  ],
+  "개발팀": [
+    "gitlab",
+    "groupware"
+  ],
+  "인사팀": [
+    "erp",
+    "groupware"
+  ],
+  "보안팀": [
+    "erp",
+    "gitlab",
+    "groupware"
+  ],
+  "마케팅팀": [
+    "groupware"
+  ]
 }

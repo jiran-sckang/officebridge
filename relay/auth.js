@@ -3,10 +3,15 @@ const { loadJson, saveJson } = require('./store');
 const rules = require('./rules');
 
 let users = loadJson('users.json');
+let bridgeTokens = loadJson('bridge-tokens.json'); // token -> { email, createdAt, lastUsedAt }
 const sessions = new Map(); // sessionId -> { id, email, name, dept, role, ip, loginAt, lastSeenAt }
 
 function persistUsers() {
   saveJson('users.json', users);
+}
+
+function persistBridgeTokens() {
+  saveJson('bridge-tokens.json', bridgeTokens);
 }
 
 function sha256(value) {
@@ -19,6 +24,40 @@ function getUser(email) {
 
 function listUsers() {
   return users;
+}
+
+// Creates a new employee (org chart entry). Used by the admin's org chart
+// page — separate from self-service signup, which this product doesn't have.
+function createUser(email, { name, dept, password, role = 'user' }) {
+  if (users[email]) return { ok: false, reason: '이미 존재하는 이메일입니다.' };
+  users[email] = {
+    name,
+    dept,
+    role,
+    passwordHash: sha256(password),
+    failedAttempts: 0,
+    lockedUntil: null,
+    blocked: false,
+  };
+  persistUsers();
+  return { ok: true };
+}
+
+function createSession(email, ip) {
+  const user = users[email];
+  const sessionId = crypto.randomUUID();
+  const now = Date.now();
+  sessions.set(sessionId, {
+    id: sessionId,
+    email,
+    name: user.name,
+    dept: user.dept,
+    role: user.role,
+    ip,
+    loginAt: now,
+    lastSeenAt: now,
+  });
+  return sessionId;
 }
 
 function isLocked(user) {
@@ -53,19 +92,56 @@ function login(email, password, ip) {
   user.lockedUntil = null;
   persistUsers();
 
-  const sessionId = crypto.randomUUID();
-  const now = Date.now();
-  sessions.set(sessionId, {
-    id: sessionId,
-    email,
-    name: user.name,
-    dept: user.dept,
-    role: user.role,
-    ip,
-    loginAt: now,
-    lastSeenAt: now,
-  });
-  return { ok: true, sessionId };
+  return { ok: true, sessionId: createSession(email, ip) };
+}
+
+// ---- Personal bridge tokens (F-11) --------------------------------------
+// A long-lived, per-employee credential the admin issues from the org chart
+// page. It's never used as a session itself — only to mint a real session
+// (same kind password login creates) without the employee typing a
+// password, so the desktop bridge app can open them straight into their
+// allowed systems.
+
+function issueBridgeToken(email) {
+  if (!users[email]) return null;
+  // one live token per employee — reissuing invalidates the old one
+  for (const [t, info] of Object.entries(bridgeTokens)) {
+    if (info.email === email) delete bridgeTokens[t];
+  }
+  const token = crypto.randomBytes(24).toString('hex');
+  bridgeTokens[token] = { email, createdAt: Date.now(), lastUsedAt: null };
+  persistBridgeTokens();
+  return token;
+}
+
+function revokeBridgeToken(email) {
+  let revoked = false;
+  for (const [t, info] of Object.entries(bridgeTokens)) {
+    if (info.email === email) {
+      delete bridgeTokens[t];
+      revoked = true;
+    }
+  }
+  if (revoked) persistBridgeTokens();
+  return revoked;
+}
+
+function getBridgeTokenFor(email) {
+  const entry = Object.entries(bridgeTokens).find(([, info]) => info.email === email);
+  return entry ? entry[0] : null;
+}
+
+// Exchanges a bridge token for a real session, exactly as if the employee
+// had logged in with a password. Returns { ok, sessionId, user } or
+// { ok: false, reason }.
+function exchangeBridgeToken(token, ip) {
+  const info = bridgeTokens[token];
+  if (!info) return { ok: false, reason: 'invalid token' };
+  const user = users[info.email];
+  if (!user || user.blocked) return { ok: false, reason: 'account unavailable' };
+  info.lastUsedAt = Date.now();
+  persistBridgeTokens();
+  return { ok: true, sessionId: createSession(info.email, ip), email: info.email, user };
 }
 
 function getSession(sessionId) {
@@ -118,6 +194,7 @@ function unlockUser(email) {
 module.exports = {
   getUser,
   listUsers,
+  createUser,
   login,
   getSession,
   destroySession,
@@ -125,4 +202,8 @@ module.exports = {
   blockUser,
   unblockUser,
   unlockUser,
+  issueBridgeToken,
+  revokeBridgeToken,
+  getBridgeTokenFor,
+  exchangeBridgeToken,
 };

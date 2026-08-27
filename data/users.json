@@ -34,5 +34,14 @@
     "blocked": false,
     "failedAttempts": 0,
     "lockedUntil": null
+  },
+  "choi.mkt@demo.co.kr": {
+    "name": "최마케팅",
+    "dept": "마케팅팀",
+    "role": "user",
+    "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
+    "failedAttempts": 0,
+    "lockedUntil": null,
+    "blocked": false
   }
 }

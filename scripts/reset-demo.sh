@@ -12,7 +12,7 @@ echo "== stopping processes =="
 bash "$ROOT/scripts/stop.sh"
 
 echo "== restoring seed data =="
-for f in users.json dept-policy.json grants.json services.json rules-config.json; do
+for f in users.json dept-policy.json grants.json services.json rules-config.json bridge-tokens.json; do
   cp "$SEED/$f" "$DATA/$f"
   echo "restored $f"
 done

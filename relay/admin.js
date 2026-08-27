@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const auth = require('./auth');
 const policy = require('./policy');
 const rules = require('./rules');
@@ -5,6 +7,8 @@ const audit = require('./audit');
 const tunnel = require('./tunnel');
 const { shell } = require('./theme');
 const { TENANT_NAME, DOMAIN } = require('./config');
+
+const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
 
 const ICON = {
   dashboard: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
@@ -14,10 +18,14 @@ const ICON = {
   sessions: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   logSystem: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>',
   logAdmin: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
+  download: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+  org: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M12 12H5v4M12 12h7v4"/></svg>',
 };
 
 const NAV = [
   { path: '/dashboard', label: '대시보드', icon: ICON.dashboard },
+  { group: '조직 관리' },
+  { path: '/org', label: '조직도', icon: ICON.org },
   { group: '정책 설정' },
   { path: '/policy/apps', label: '사내시스템 현황', icon: ICON.apps },
   { path: '/policy/access', label: '정책 접근관리', icon: ICON.access },
@@ -26,6 +34,8 @@ const NAV = [
   { group: '로그 조회' },
   { path: '/logs/system', label: '시스템 접속로그', icon: ICON.logSystem },
   { path: '/logs/admin', label: '관리자 로그', icon: ICON.logAdmin },
+  { group: '설치' },
+  { path: '/downloads', label: '커넥터 설치', icon: ICON.download },
 ];
 
 function initial(name) {
@@ -111,6 +121,55 @@ function renderDashboard(session) {
 function logLineHtml(e) {
   const cls = e.verdict === 'ALLOW' || e.verdict === 'OK' ? 'badge-ok' : (e.verdict === 'DENY' || e.verdict === 'FAIL' ? 'badge-deny' : 'badge-warn');
   return `<div class="log-line">[${fmtTime(new Date(e.ts).getTime())}] <b>${e.type}</b> <span class="${cls}">${e.verdict}</span> ${e.user} → ${e.service} (${e.ip}) ${e.reason || ''}</div>`;
+}
+
+function renderOrgChart(session) {
+  const users = auth.listUsers();
+  const rows = Object.entries(users)
+    .map(([email, u]) => {
+      const token = auth.getBridgeTokenFor(email);
+      const bridgeCell = token
+        ? `<a href="/_ob/downloads/bridge-config?email=${encodeURIComponent(email)}" class="btn ghost" style="text-decoration:none;display:inline-block">설정파일</a>
+           ${chipForm('/org/bridge-issue', { email }, '재발급', false)}
+           ${chipForm('/org/bridge-revoke', { email }, '회수', false)}`
+        : chipForm('/org/bridge-issue', { email }, '개인 브릿지 발급', false);
+      return `<tr>
+        <td>${u.name}</td>
+        <td>${email}</td>
+        <td>${u.dept}</td>
+        <td>${u.role === 'admin' ? '관리자' : '일반'}</td>
+        <td>${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}</td>
+        <td>${bridgeCell}</td>
+      </tr>`;
+    })
+    .join('');
+
+  return adminShell('/org', session, '조직도', `
+    <div class="card">
+      <table>
+        <thead><tr><th>이름</th><th>이메일</th><th>부서</th><th>역할</th><th>상태</th><th>개인 브릿지</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div style="margin-bottom:10px;font-weight:600">새 임직원 등록</div>
+      <form method="POST" action="/_ob/api/admin/org/create">
+        <div class="row">
+          <div><input type="text" name="name" placeholder="이름" required></div>
+          <div><input type="text" name="email" placeholder="이메일" required></div>
+        </div>
+        <div class="row">
+          <div><input type="text" name="dept" placeholder="부서 (예: 마케팅팀)" required></div>
+          <div><input type="text" name="password" placeholder="초기 비밀번호" required></div>
+        </div>
+        <button class="btn" type="submit">등록</button>
+      </form>
+    </div>
+    <div style="color:var(--muted);font-size:12px">
+      "개인 브릿지 발급"을 누르면 그 임직원 전용 설정파일을 만들 수 있습니다 — 이 파일을 브릿지 앱에 불러오면
+      비밀번호 입력 없이 본인이 접근 가능한 시스템만 바로 뜹니다. 부서/개인 접근 권한은 [정책 접근관리]에서 설정하세요.
+    </div>
+  `);
 }
 
 function renderPolicyApps(session) {
@@ -302,6 +361,76 @@ function renderLogsAdmin(session) {
   `);
 }
 
+function fileSizeLabel(fileName) {
+  try {
+    const stat = fs.statSync(path.join(DOWNLOADS_DIR, fileName));
+    const mb = stat.size / (1024 * 1024);
+    return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(stat.size / 1024)} KB`;
+  } catch {
+    return null;
+  }
+}
+
+function downloadCard({ title, desc, fileName, steps }) {
+  const size = fileSizeLabel(fileName);
+  const stepsHtml = steps.map((s) => `<li>${s}</li>`).join('');
+  return `
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">${title}</div>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:14px">${desc}</div>
+      ${size
+        ? `<a class="btn" href="/_ob/downloads/${fileName}" style="display:inline-block;text-decoration:none">다운로드 (${size})</a>`
+        : `<span class="tag-deny">아직 서버에 파일이 없습니다 (downloads/${fileName})</span>`}
+      <ol style="margin-top:16px;padding-left:20px;font-size:13px;color:var(--text)">${stepsHtml}</ol>
+    </div>`;
+}
+
+function renderDownloads(session) {
+  const macCard = downloadCard({
+    title: 'macOS 메뉴바 앱',
+    desc: '메뉴바에서 연결 상태를 보고, 등록된 사내 시스템을 클릭 한 번으로 여는 앱입니다. Apple Silicon(M1 이상) 전용.',
+    fileName: 'officebridge-connector-mac.zip',
+    steps: [
+      '다운로드한 zip 압축을 풀고 "OfficeBridge Connector.app"을 Applications 폴더로 이동',
+      '처음 실행 시 "확인되지 않은 개발자" 경고가 뜨면 앱을 우클릭 → 열기',
+      '메뉴바 아이콘 클릭 → 연결 상태와 등록된 시스템 목록 확인',
+    ],
+  });
+
+  const kitCard = downloadCard({
+    title: '커넥터 킷 (범용, Node.js)',
+    desc: '어떤 OS에서든 실행 가능한 커맨드라인 커넥터입니다. 직접 서버에 상시 구동하거나 개발용으로 적합합니다.',
+    fileName: 'connector-kit.zip',
+    steps: [
+      '압축을 풀고 그 안의 README.md를 따라 진행 (Node.js 설치 → npm install → node index.js)',
+      '릴레이 주소·토큰은 config.js에 이미 이 릴레이용으로 채워져 있음',
+      '실행하면 로컬 관리 웹(:8090)도 함께 뜸 — 사내 시스템 주소는 거기서 등록',
+    ],
+  });
+
+  const bridgeCard = downloadCard({
+    title: '임직원용 브릿지 앱',
+    desc: '일반 임직원이 자기 컴퓨터에 설치하는 앱입니다. [조직도] 페이지에서 그 사람 전용 설정파일을 따로 받아 같이 전달해야 합니다 — 앱만으로는 동작하지 않습니다.',
+    fileName: 'officebridge-bridge-mac.zip',
+    steps: [
+      '이 zip(앱 본체)과, [조직도]에서 받은 그 임직원 전용 설정파일(.json)을 같이 전달',
+      '앱을 Applications 폴더로 이동 후 실행 (우클릭 → 열기)',
+      '처음 실행 시 뜨는 파일 선택창에서 전달받은 설정파일(.json)을 선택',
+      '이후로는 로그인 없이 메뉴바에서 본인이 접근 가능한 시스템만 바로 클릭해서 접속',
+    ],
+  });
+
+  return adminShell('/downloads', session, '설치 파일', `
+    <div style="margin-bottom:16px;color:var(--muted);font-size:13px">
+      아래 셋 다 이 릴레이(${DOMAIN})에 연결되도록 미리 설정되어 있습니다. 위 둘은 사내망 안의 장비를 관리하는
+      IT 담당자용, 마지막 하나는 일반 임직원 개인용입니다.
+    </div>
+    ${macCard}
+    ${kitCard}
+    ${bridgeCard}
+  `);
+}
+
 function renderPage(pathname, session, query) {
   switch (pathname) {
     case '/dashboard': return renderDashboard(session);
@@ -311,6 +440,8 @@ function renderPage(pathname, session, query) {
     case '/policy/sessions': return renderSessions(session);
     case '/logs/system': return renderLogsSystem(session, query.f);
     case '/logs/admin': return renderLogsAdmin(session);
+    case '/downloads': return renderDownloads(session);
+    case '/org': return renderOrgChart(session);
     default: return null;
   }
 }
@@ -318,6 +449,26 @@ function renderPage(pathname, session, query) {
 // ---- Actions (mutations triggered from admin forms) ------------------
 
 const actions = {
+  'org/create'(body, session, ip) {
+    const { email, name, dept, password } = body;
+    const result = auth.createUser(email, { name, dept, password });
+    if (!result.ok) {
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `임직원 등록 실패: ${email} (${result.reason})` });
+      return;
+    }
+    policy.ensureDept(dept);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 등록: ${name} (${email}, ${dept})` });
+  },
+  'org/bridge-issue'(body, session, ip) {
+    const { email } = body;
+    auth.issueBridgeToken(email);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 토큰 발급: ${email}` });
+  },
+  'org/bridge-revoke'(body, session, ip) {
+    const { email } = body;
+    auth.revokeBridgeToken(email);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 토큰 회수: ${email}` });
+  },
   'services/label'(body, session, ip) {
     const { name, label } = body;
     policy.setLabel(name, label);

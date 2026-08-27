@@ -56,6 +56,8 @@ const CSS = `
   .btn.danger { background: var(--deny); }
   .btn.ghost { background: #fff; border: 1px solid var(--border); color: var(--text); }
   input[type=text], input[type=email], input[type=password] { padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; width: 100%; margin-bottom: 10px; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
   .badge-ok { color: var(--ok); font-weight: 600; }
   .badge-deny { color: var(--deny); font-weight: 600; }
   .badge-warn { color: var(--warn); font-weight: 600; }
