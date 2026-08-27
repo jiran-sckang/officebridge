@@ -62,6 +62,10 @@
       <input type="email" id="email" required>
       <label>비밀번호</label>
       <input type="password" id="password" required>
+      <div id="mfaField" style="display:none">
+        <label>인증 코드 (Google Authenticator, 6자리)</label>
+        <input type="text" id="totpCode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}">
+      </div>
       <button type="submit">로그인 후 터널 시작</button>
       <div class="error" id="loginError"></div>
     </form>
@@ -96,14 +100,17 @@
     const companyCode = document.getElementById('companyCode').value.trim();
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
-    try {
-      await window.connectorApp.register(companyCode, email, password);
-      refresh();
-    } catch (err) {
-      loginError.textContent = err.message
-        .replace(/^Error invoking remote method[^:]*:\s*/, '')
-        .replace(/^Error:\s*/, '');
+    const totpCode = document.getElementById('totpCode').value.trim();
+    const result = await window.connectorApp.register(companyCode, email, password, totpCode);
+    if (!result.ok) {
+      loginError.textContent = result.reason;
+      if (result.needsMfa) {
+        document.getElementById('mfaField').style.display = 'block';
+        document.getElementById('totpCode').focus();
+      }
+      return;
     }
+    refresh();
   });
 
   document.getElementById('logoutLink').addEventListener('click', async () => {

@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { loadJson, saveJson } = require('./store');
 const rules = require('./rules');
+const totp = require('./totp');
 
 let users = loadJson('users.json');
 let bridgeTokens = loadJson('bridge-tokens.json'); // token -> { email, createdAt, lastUsedAt }
@@ -194,12 +195,63 @@ function revokeConnectorToken(email) {
 
 // Admin-only counterpart to registerBridge — only an admin account can stand
 // up a connector. Reissuing invalidates whatever token that admin had
-// running before, same as bridge tokens.
-function registerConnector(email, password) {
+// running before, same as bridge tokens. If the admin has MFA enrolled, a
+// valid TOTP code is required too — a password alone standing up a live
+// tunnel into the customer network is exactly the "admin credential theft"
+// exposure MFA here is meant to close.
+function registerConnector(email, password, totpCode) {
   const result = verifyPassword(email, password);
   if (!result.ok) return result;
   if (result.user.role !== 'admin') return { ok: false, reason: '커넥터는 관리자 계정으로만 실행할 수 있습니다.' };
+  if (result.user.mfaSecret) {
+    if (!totpCode) return { ok: false, needsMfa: true, reason: 'MFA 인증 코드를 입력해주세요.' };
+    if (!totp.verifyTotp(result.user.mfaSecret, totpCode)) {
+      return { ok: false, needsMfa: true, reason: 'MFA 코드가 올바르지 않습니다.' };
+    }
+  }
   return { ok: true, connectorToken: issueConnectorToken(email), user: result.user };
+}
+
+// ---- MFA (Google Authenticator-compatible TOTP) --------------------------
+// Two-step enrollment: startMfaEnroll generates a secret and holds it as
+// "pending" until confirmMfaEnroll verifies the admin actually scanned it
+// and can produce valid codes — never activate MFA on an unconfirmed
+// secret, or a typo'd/failed scan would silently brick the account's own
+// connector login.
+
+function startMfaEnroll(email) {
+  const user = users[email];
+  if (!user) return null;
+  user.mfaPendingSecret = totp.randomBase32();
+  persistUsers();
+  return { secret: user.mfaPendingSecret, otpauthUri: totp.otpauthUri(user.mfaPendingSecret, email) };
+}
+
+function confirmMfaEnroll(email, code) {
+  const user = users[email];
+  if (!user || !user.mfaPendingSecret) return { ok: false, reason: '먼저 MFA 설정을 시작해주세요.' };
+  if (!totp.verifyTotp(user.mfaPendingSecret, code)) {
+    return { ok: false, reason: '코드가 올바르지 않습니다. 다시 시도해주세요.' };
+  }
+  user.mfaSecret = user.mfaPendingSecret;
+  user.mfaPendingSecret = null;
+  persistUsers();
+  return { ok: true };
+}
+
+function disableMfa(email) {
+  const user = users[email];
+  if (!user) return false;
+  user.mfaSecret = null;
+  user.mfaPendingSecret = null;
+  persistUsers();
+  return true;
+}
+
+function getMfaStatus(email) {
+  const user = users[email];
+  if (!user) return { enrolled: false, pending: false };
+  return { enrolled: !!user.mfaSecret, pending: !!user.mfaPendingSecret, pendingSecret: user.mfaPendingSecret, pendingUri: user.mfaPendingSecret ? totp.otpauthUri(user.mfaPendingSecret, email) : null };
 }
 
 // Used by tunnel.js to accept either a dynamically-issued operator token or
@@ -297,4 +349,8 @@ module.exports = {
   revokeConnectorToken,
   registerConnector,
   validateConnectorToken,
+  startMfaEnroll,
+  confirmMfaEnroll,
+  disableMfa,
+  getMfaStatus,
 };

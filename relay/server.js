@@ -242,11 +242,10 @@ async function handleInternal(req, res, ctx) {
       res.writeHead(401);
       return res.end('회사코드가 올바르지 않습니다.');
     }
-    const result = auth.registerConnector(body.email, body.password);
+    const result = auth.registerConnector(body.email, body.password, body.totpCode);
     if (!result.ok) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `커넥터 앱 등록 실패: ${result.reason}` });
-      res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end(result.reason);
+      return sendJson(res, 401, { reason: result.reason, needsMfa: !!result.needsMfa });
     }
     audit.log({ type: 'ADMIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '커넥터 앱 로그인' });
     return sendJson(res, 200, { connectorToken: result.connectorToken, name: result.user.name });
@@ -327,8 +326,11 @@ async function handleInternal(req, res, ctx) {
       return res.end('not found');
     }
     const body = await readFormBody(req);
-    fn(body, session, ip);
-    res.writeHead(302, { Location: req.headers.referer || `https://admin.${DOMAIN}/dashboard` });
+    // An action may return a redirect path to use instead of the referer —
+    // e.g. to attach a ?error=1 the target page reads back out, which a
+    // plain referer redirect can't express.
+    const customRedirect = fn(body, session, ip);
+    res.writeHead(302, { Location: customRedirect || req.headers.referer || `https://admin.${DOMAIN}/dashboard` });
     return res.end();
   }
 

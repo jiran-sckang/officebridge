@@ -157,7 +157,13 @@ function postJson(hostname, urlPath, body) {
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
           const text = Buffer.concat(chunks).toString('utf8');
-          if (res.statusCode !== 200) return reject(new Error(text || `relay responded ${res.statusCode}`));
+          if (res.statusCode !== 200) {
+            let data = null;
+            try { data = JSON.parse(text); } catch { /* not JSON — plain-text error */ }
+            const err = new Error((data && data.reason) || text || `relay responded ${res.statusCode}`);
+            err.data = data;
+            return reject(err);
+          }
           try { resolve(JSON.parse(text)); } catch (err) { reject(err); }
         });
       }
@@ -187,12 +193,19 @@ const mb = menubar({
 
 app.on('before-quit', stopTunnel);
 
-ipcMain.handle('connector:register', async (_event, { companyCode, email, password }) => {
-  const result = await postJson(RELAY_DOMAIN, '/_ob/api/connector/register', { companyCode, email, password });
-  connectorToken = result.connectorToken;
-  operatorName = result.name;
-  connect();
-  return { name: result.name };
+ipcMain.handle('connector:register', async (_event, { companyCode, email, password, totpCode }) => {
+  // Resolved (never thrown) with an {ok:false,...} shape on failure — errors
+  // thrown from a handler lose everything but .message crossing the IPC
+  // boundary, and we need the needsMfa flag to reach the renderer intact.
+  try {
+    const result = await postJson(RELAY_DOMAIN, '/_ob/api/connector/register', { companyCode, email, password, totpCode });
+    connectorToken = result.connectorToken;
+    operatorName = result.name;
+    connect();
+    return { ok: true, name: result.name };
+  } catch (err) {
+    return { ok: false, reason: err.message, needsMfa: !!(err.data && err.data.needsMfa) };
+  }
 });
 
 ipcMain.handle('connector:logout', async () => {

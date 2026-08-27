@@ -25,6 +25,7 @@ const ICON = {
   person: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
   plus: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
   search: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  lock: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
 };
 
 const AVATAR_COLORS = ['#0c51a1', '#7c3aed', '#059669', '#c2410c', '#be123c', '#0891b2', '#a21caf', '#4d7c0f'];
@@ -42,6 +43,8 @@ const NAV = [
   { path: '/dashboard', label: '대시보드', icon: ICON.dashboard },
   { group: '조직 관리' },
   { path: '/org', label: '조직도', icon: ICON.org },
+  { group: '보안' },
+  { path: '/security', label: '2차 인증(MFA)', icon: ICON.lock },
   { group: '정책 설정' },
   { path: '/policy/apps', label: '사내시스템 현황', icon: ICON.apps },
   { path: '/policy/access', label: '정책 접근관리', icon: ICON.access },
@@ -279,6 +282,54 @@ function renderOrgChart(session) {
       }
     </script>
   `);
+}
+
+function renderSecurity(session, query) {
+  const status = auth.getMfaStatus(session.email);
+  let body;
+
+  if (status.enrolled) {
+    body = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px">
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">2차 인증 활성화됨</div>
+            <div class="muted" style="font-size:13px">커넥터 앱 로그인 시 비밀번호 다음 단계로 Google Authenticator 코드가 필요합니다.</div>
+          </div>
+          ${chipForm('/security/mfa-disable', {}, '비활성화', false)}
+        </div>
+      </div>`;
+  } else if (status.pending) {
+    const errorBox = query.mfaError ? '<div class="error-box">코드가 올바르지 않습니다. 다시 시도해주세요.</div>' : '';
+    body = `
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:10px">1단계 — Google Authenticator에 등록</div>
+        <div class="muted" style="font-size:13px;margin-bottom:12px">
+          Google Authenticator 앱에서 "코드 스캔" 대신 "직접 입력"(수동 설정 키)을 선택하고 아래 키를 입력하세요.
+        </div>
+        <div style="font-family:'SFMono-Regular',Consolas,monospace;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:15px;letter-spacing:1px;margin-bottom:16px;word-break:break-all">
+          ${status.pendingSecret}
+        </div>
+        <div style="font-weight:600;margin-bottom:8px">2단계 — 앱에 뜨는 6자리 코드 입력해서 확인</div>
+        ${errorBox}
+        <form method="POST" action="/_ob/api/admin/security/mfa-confirm" style="max-width:200px">
+          <input type="text" name="code" inputmode="numeric" maxlength="6" placeholder="123456" required autofocus>
+          <button class="btn" type="submit" style="margin-top:10px">확인</button>
+        </form>
+      </div>`;
+  } else {
+    body = `
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:6px">2차 인증이 꺼져있습니다</div>
+        <div class="muted" style="font-size:13px;margin-bottom:14px">
+          커넥터 앱은 관리자 로그인만으로 사내망 터널을 열 수 있어, 비밀번호 하나가 뚫리면 그대로 뚫립니다.
+          Google Authenticator 기반 2차 인증을 켜두는 걸 권장합니다.
+        </div>
+        ${chipForm('/security/mfa-start', {}, '2차 인증 설정 시작', false)}
+      </div>`;
+  }
+
+  return adminShell('/security', session, '2차 인증(MFA)', body);
 }
 
 function renderPolicyApps(session) {
@@ -568,6 +619,7 @@ function renderPage(pathname, session, query) {
     case '/logs/admin': return renderLogsAdmin(session);
     case '/downloads': return renderDownloads(session);
     case '/org': return renderOrgChart(session);
+    case '/security': return renderSecurity(session, query);
     default: return null;
   }
 }
@@ -575,6 +627,19 @@ function renderPage(pathname, session, query) {
 // ---- Actions (mutations triggered from admin forms) ------------------
 
 const actions = {
+  'security/mfa-start'(body, session, ip) {
+    auth.startMfaEnroll(session.email);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 설정 시작' });
+  },
+  'security/mfa-confirm'(body, session, ip) {
+    const result = auth.confirmMfaEnroll(session.email, body.code);
+    audit.log({ type: 'ADMIN', verdict: result.ok ? 'OK' : 'FAIL', user: session.email, service: '-', ip, reason: result.ok ? 'MFA 활성화 완료' : `MFA 확인 실패: ${result.reason}` });
+    return `https://admin.${DOMAIN}/security${result.ok ? '' : '?mfaError=1'}`;
+  },
+  'security/mfa-disable'(body, session, ip) {
+    auth.disableMfa(session.email);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 비활성화' });
+  },
   'org/dept-create'(body, session, ip) {
     const dept = (body.dept || '').trim();
     if (!dept) return;

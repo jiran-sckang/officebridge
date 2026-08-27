@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('connectorApp', {
-  register: (companyCode, email, password) => ipcRenderer.invoke('connector:register', { companyCode, email, password }),
+  register: (companyCode, email, password, totpCode) => ipcRenderer.invoke('connector:register', { companyCode, email, password, totpCode }),
   logout: () => ipcRenderer.invoke('connector:logout'),
   getStatus: () => ipcRenderer.invoke('connector:getStatus'),
   addService: (name, internalAddress) => ipcRenderer.invoke('connector:addService', { name, internalAddress }),
