@@ -4,25 +4,34 @@
 // envelopes over that one connection by id.
 const WebSocket = require('ws');
 const crypto = require('crypto');
-const { loadJson } = require('./store');
 const policy = require('./policy');
+const auth = require('./auth');
 
 let connectorSocket = null;
+let currentOperator = null; // admin email that authenticated this connection, or null for the legacy static token
 let registeredServices = new Map(); // name -> internalAddress, as currently reported by the connector
 const pending = new Map(); // id -> { resolve, reject, timeout }
 
-function getToken() {
-  return loadJson('tokens.json').connectorToken;
-}
-
 function validateToken(token) {
-  return token === getToken();
+  return auth.validateConnectorToken(token).ok;
 }
 
-function acceptConnection(ws) {
+function getOperator() {
+  return currentOperator;
+}
+
+// Force-closes the live tunnel — used when an admin revokes a connector
+// operator's token and wants that session to stop immediately rather than
+// wait for it to notice on its own.
+function disconnectCurrent() {
+  if (connectorSocket) connectorSocket.close();
+}
+
+function acceptConnection(ws, token) {
   connectorSocket = ws;
+  currentOperator = auth.validateConnectorToken(token).email;
   registeredServices = new Map();
-  console.log('[relay] connector tunnel established');
+  console.log('[relay] connector tunnel established', currentOperator ? `(operator: ${currentOperator})` : '(legacy token)');
 
   const pingInterval = setInterval(() => {
     if (ws.readyState === WebSocket.OPEN) ws.ping();
@@ -54,6 +63,7 @@ function acceptConnection(ws) {
     clearInterval(pingInterval);
     if (connectorSocket === ws) {
       connectorSocket = null;
+      currentOperator = null;
       registeredServices = new Map();
     }
     console.log('[relay] connector tunnel closed');
@@ -110,6 +120,8 @@ module.exports = {
   validateToken,
   acceptConnection,
   isConnected,
+  getOperator,
+  disconnectCurrent,
   servesService,
   getRegisteredServices,
   getRegisteredServiceAddress,

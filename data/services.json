@@ -1,5 +1,14 @@
 {
-  "erp": { "label": "ERP" },
-  "gitlab": { "label": "GitLab" },
-  "groupware": { "label": "그룹웨어" }
+  "erp": {
+    "label": "ERP"
+  },
+  "gitlab": {
+    "label": "GitLab"
+  },
+  "groupware": {
+    "label": "그룹웨어"
+  },
+  "zabbix": {
+    "label": "zabbix"
+  }
 }

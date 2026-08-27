@@ -4,6 +4,7 @@ const rules = require('./rules');
 
 let users = loadJson('users.json');
 let bridgeTokens = loadJson('bridge-tokens.json'); // token -> { email, createdAt, lastUsedAt }
+let connectorTokens = loadJson('connector-tokens.json'); // token -> { email, createdAt, lastUsedAt }
 const sessions = new Map(); // sessionId -> { id, email, name, dept, role, ip, loginAt, lastSeenAt }
 
 function persistUsers() {
@@ -12,6 +13,10 @@ function persistUsers() {
 
 function persistBridgeTokens() {
   saveJson('bridge-tokens.json', bridgeTokens);
+}
+
+function persistConnectorTokens() {
+  saveJson('connector-tokens.json', connectorTokens);
 }
 
 function sha256(value) {
@@ -157,6 +162,61 @@ function registerBridge(email, password) {
   return { ok: true, bridgeToken: issueBridgeToken(email), user: result.user };
 }
 
+// ---- Personal connector operator tokens ----------------------------------
+// Same shape as bridge tokens, but issued only to admins and consumed by
+// tunnel.js directly (never exchanged for a browser session) — this is what
+// replaces the old single hardcoded shared CONNECTOR_TOKEN. Operating a
+// connector now requires an actual admin login, and each login is
+// individually attributable and revocable.
+
+function issueConnectorToken(email) {
+  if (!users[email]) return null;
+  for (const [t, info] of Object.entries(connectorTokens)) {
+    if (info.email === email) delete connectorTokens[t];
+  }
+  const token = crypto.randomBytes(24).toString('hex');
+  connectorTokens[token] = { email, createdAt: Date.now(), lastUsedAt: null };
+  persistConnectorTokens();
+  return token;
+}
+
+function revokeConnectorToken(email) {
+  let revoked = false;
+  for (const [t, info] of Object.entries(connectorTokens)) {
+    if (info.email === email) {
+      delete connectorTokens[t];
+      revoked = true;
+    }
+  }
+  if (revoked) persistConnectorTokens();
+  return revoked;
+}
+
+// Admin-only counterpart to registerBridge — only an admin account can stand
+// up a connector. Reissuing invalidates whatever token that admin had
+// running before, same as bridge tokens.
+function registerConnector(email, password) {
+  const result = verifyPassword(email, password);
+  if (!result.ok) return result;
+  if (result.user.role !== 'admin') return { ok: false, reason: '커넥터는 관리자 계정으로만 실행할 수 있습니다.' };
+  return { ok: true, connectorToken: issueConnectorToken(email), user: result.user };
+}
+
+// Used by tunnel.js to accept either a dynamically-issued operator token or
+// the legacy static shared token (data/tokens.json) for backward
+// compatibility with connector-kit deployments that haven't switched over.
+// Returns the owning admin's email for dynamic tokens, or null for the
+// legacy token (no individual attribution possible for that one).
+function validateConnectorToken(token) {
+  const legacy = loadJson('tokens.json').connectorToken;
+  if (token === legacy) return { ok: true, email: null };
+  const info = connectorTokens[token];
+  if (!info) return { ok: false };
+  info.lastUsedAt = Date.now();
+  persistConnectorTokens();
+  return { ok: true, email: info.email };
+}
+
 // Exchanges a bridge token for a real session, exactly as if the employee
 // had logged in with a password. Returns { ok, sessionId, user } or
 // { ok: false, reason }.
@@ -233,4 +293,8 @@ module.exports = {
   getBridgeTokenFor,
   exchangeBridgeToken,
   registerBridge,
+  issueConnectorToken,
+  revokeConnectorToken,
+  registerConnector,
+  validateConnectorToken,
 };

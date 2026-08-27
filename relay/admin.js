@@ -88,9 +88,23 @@ function renderDashboard(session) {
   const todayBlocked = audit.getRecent({ limit: 1000 }).filter(
     (e) => new Date(e.ts).getTime() >= startOfDay.getTime() && (e.verdict === 'DENY' || e.verdict === 'FAIL')
   ).length;
-  const connectorState = tunnel.isConnected()
+  const connected = tunnel.isConnected();
+  const operator = tunnel.getOperator();
+  const connectorState = connected
     ? `<span class="badge-ok">연결됨</span> (${tunnel.getRegisteredServices().join(', ') || '서비스 없음'})`
     : `<span class="badge-deny">연결 안됨</span>`;
+
+  const operatorCard = connected
+    ? `<div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:600;margin-bottom:2px">커넥터 운영자</div>
+            <div style="color:var(--muted);font-size:13px">${operator ? `${operator}로 로그인해서 실행 중` : '레거시 고정 토큰으로 연결됨 (운영자 식별 불가)'}</div>
+          </div>
+          ${operator ? chipForm('/connector/disconnect', { email: operator }, '연결 강제 종료', false) : ''}
+        </div>
+      </div>`
+    : '';
 
   const recent = audit.getRecent({ limit: 40 })
     .map((e) => logLineHtml(e))
@@ -102,6 +116,7 @@ function renderDashboard(session) {
       <div class="tile"><div class="tile-icon">${ICON.rules}</div><div><div class="num">${todayBlocked}</div><div class="label">오늘 차단/실패 건수</div></div></div>
       <div class="tile"><div class="tile-icon">${ICON.apps}</div><div><div class="num" style="font-size:16px">${connectorState}</div><div class="label">커넥터 상태</div></div></div>
     </div>
+    ${operatorCard}
     <div class="card">
       <div style="margin-bottom:10px;color:var(--muted);font-size:12px">실시간 접속 로그</div>
       <div id="log">${recent}</div>
@@ -211,41 +226,59 @@ function renderPolicyApps(session) {
   `);
 }
 
+// Groups employees under their department, in listing order. Used to build
+// the collapsible org-tree views — this keeps large customer orgs (100s of
+// employees) from being one giant flat table.
+function groupByDept(users, { includeAdmins = true } = {}) {
+  const byDept = new Map();
+  Object.entries(users).forEach(([email, u]) => {
+    if (!includeAdmins && u.role === 'admin') return;
+    if (!byDept.has(u.dept)) byDept.set(u.dept, []);
+    byDept.get(u.dept).push([email, u]);
+  });
+  return byDept;
+}
+
 function renderPolicyAccess(session) {
   const services = policy.getServices();
   const deptPolicy = policy.getDeptPolicy();
   const grants = policy.getGrants();
   const users = auth.listUsers();
   const serviceNames = Object.keys(services);
+  const byDept = groupByDept(users, { includeAdmins: false });
 
-  const deptRows = Object.keys(deptPolicy)
-    .map((dept) => {
-      const cells = serviceNames.map((name) => {
-        const on = (deptPolicy[dept] || []).includes(name);
-        return chipForm('/policy/dept', { dept, service: name, allow: on ? '0' : '1' }, `${services[name].label} ${on ? '✓' : ''}`, on);
-      }).join(' ');
-      return `<tr><td>${dept}</td><td>${cells}</td></tr>`;
-    }).join('');
+  const nodes = Object.keys(deptPolicy).map((dept) => {
+    const members = byDept.get(dept) || [];
+    const deptChips = serviceNames.map((name) => {
+      const on = (deptPolicy[dept] || []).includes(name);
+      return chipForm('/policy/dept', { dept, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
+    }).join(' ');
 
-  const userRows = Object.entries(users)
-    .filter(([, u]) => u.role !== 'admin')
-    .map(([email, u]) => {
-      const cells = serviceNames.map((name) => {
-        const on = (grants[email] || []).includes(name);
-        return chipForm('/policy/individual', { email, service: name, allow: on ? '0' : '1' }, `${services[name].label} ${on ? '✓' : ''}`, on);
-      }).join(' ');
-      return `<tr><td>${u.name} (${email})</td><td>${cells}</td></tr>`;
-    }).join('');
+    const memberRows = members.length
+      ? members.map(([email, u]) => {
+          const cells = serviceNames.map((name) => {
+            const on = (grants[email] || []).includes(name);
+            return chipForm('/policy/individual', { email, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
+          }).join(' ');
+          return `<div class="member-row"><span>${u.name} <span class="muted">(${email})</span></span><span>${cells}</span></div>`;
+        }).join('')
+      : '<div class="member-row"><span class="muted">소속 임직원 없음</span></div>';
+
+    return `<details class="org-node">
+      <summary>
+        <span><span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span>${deptChips}</span>
+      </summary>
+      <div class="org-children">${memberRows}</div>
+    </details>`;
+  }).join('');
 
   return adminShell('/policy/access', session, '정책 접근관리', `
-    <div class="card">
-      <div style="margin-bottom:10px;font-weight:600">부서 정책</div>
-      <table><thead><tr><th>부서</th><th>허용 시스템</th></tr></thead><tbody>${deptRows}</tbody></table>
+    <div style="margin-bottom:12px;color:var(--muted);font-size:13px">
+      부서를 펼치면 소속 임직원별 개인 추가 권한(부서 정책 위에 더해짐)이 나옵니다. 부서 칩은 그 부서
+      전체에 적용되고, 펼친 안의 칩은 그 사람 한 명에게만 적용됩니다.
     </div>
-    <div class="card">
-      <div style="margin-bottom:10px;font-weight:600">개인 추가 권한 (부서 정책 위에 더해짐)</div>
-      <table><thead><tr><th>사용자</th><th>개인 허용</th></tr></thead><tbody>${userRows}</tbody></table>
-    </div>
+    ${nodes}
   `);
 }
 
@@ -296,23 +329,35 @@ function renderSessions(session) {
     </tr>`).join('');
 
   const users = auth.listUsers();
-  const userRows = Object.entries(users).map(([email, u]) => {
-    const locked = u.lockedUntil && Date.now() < u.lockedUntil;
-    return `<tr>
-      <td>${u.name} (${email})</td><td>${u.dept}</td>
-      <td>${u.blocked ? '<span class="badge-deny">차단됨</span>' : '<span class="badge-ok">정상</span>'}</td>
-      <td>${locked ? `<span class="badge-warn">잠김 (~${fmtTime(u.lockedUntil)})</span>` : '-'}</td>
-      <td>
-        <form class="inline" method="POST" action="/_ob/api/admin/users/${u.blocked ? 'unblock' : 'block'}">
-          <input type="hidden" name="email" value="${email}">
-          <button class="btn ${u.blocked ? 'ghost' : 'danger'}" type="submit">${u.blocked ? '차단 해제' : '계정 차단'}</button>
-        </form>
-        ${locked ? `<form class="inline" method="POST" action="/_ob/api/admin/users/unlock">
-          <input type="hidden" name="email" value="${email}">
-          <button class="btn ghost" type="submit">잠금 해제</button>
-        </form>` : ''}
-      </td>
-    </tr>`;
+  const byDept = groupByDept(users, { includeAdmins: true });
+
+  const acctNodes = Array.from(byDept.entries()).map(([dept, members]) => {
+    const memberRows = members.map(([email, u]) => {
+      const locked = u.lockedUntil && Date.now() < u.lockedUntil;
+      return `<div class="member-row">
+        <span>${u.name} <span class="muted">(${email})</span>${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
+        <span>
+          ${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}
+          ${locked ? `<span class="tag-warn">잠김 (~${fmtTime(u.lockedUntil)})</span>` : ''}
+          <form class="inline" method="POST" action="/_ob/api/admin/users/${u.blocked ? 'unblock' : 'block'}">
+            <input type="hidden" name="email" value="${email}">
+            <button class="btn ${u.blocked ? 'ghost' : 'danger'}" type="submit" style="padding:4px 10px;font-size:11px">${u.blocked ? '차단 해제' : '계정 차단'}</button>
+          </form>
+          ${locked ? `<form class="inline" method="POST" action="/_ob/api/admin/users/unlock"><input type="hidden" name="email" value="${email}"><button class="btn ghost" type="submit" style="padding:4px 10px;font-size:11px">잠금 해제</button></form>` : ''}
+        </span>
+      </div>`;
+    }).join('');
+
+    return `<details class="org-node">
+      <summary>
+        <span><span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span>
+          ${chipForm('/org/dept-block', { dept, action: 'block' }, '부서 전체 차단', false)}
+          ${chipForm('/org/dept-block', { dept, action: 'unblock' }, '부서 전체 해제', false)}
+        </span>
+      </summary>
+      <div class="org-children">${memberRows}</div>
+    </details>`;
   }).join('');
 
   return adminShell('/policy/sessions', session, '활성세션·계정통제', `
@@ -320,10 +365,8 @@ function renderSessions(session) {
       <div style="margin-bottom:10px;font-weight:600">활성 세션</div>
       <table><thead><tr><th>사용자</th><th>IP</th><th>로그인</th><th>최근활동</th><th></th></tr></thead><tbody>${sessRows || '<tr><td colspan="5">활성 세션 없음</td></tr>'}</tbody></table>
     </div>
-    <div class="card">
-      <div style="margin-bottom:10px;font-weight:600">계정 통제</div>
-      <table><thead><tr><th>사용자</th><th>부서</th><th>상태</th><th>잠금</th><th></th></tr></thead><tbody>${userRows}</tbody></table>
-    </div>
+    <div style="margin:18px 0 10px;font-weight:600">계정 통제 (부서별)</div>
+    ${acctNodes}
   `);
 }
 
@@ -439,6 +482,20 @@ const actions = {
     const { email } = body;
     auth.revokeBridgeToken(email);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 토큰 회수: ${email}` });
+  },
+  'org/dept-block'(body, session, ip) {
+    const { dept, action } = body;
+    const emails = Object.entries(auth.listUsers())
+      .filter(([, u]) => u.dept === dept)
+      .map(([email]) => email);
+    emails.forEach((email) => (action === 'block' ? auth.blockUser(email) : auth.unblockUser(email)));
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `부서 일괄 ${action === 'block' ? '차단' : '차단 해제'}: ${dept} (${emails.length}명)` });
+  },
+  'connector/disconnect'(body, session, ip) {
+    const { email } = body;
+    auth.revokeConnectorToken(email);
+    tunnel.disconnectCurrent();
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `커넥터 연결 강제 종료 및 토큰 회수: ${email}` });
   },
   'services/label'(body, session, ip) {
     const { name, label } = body;

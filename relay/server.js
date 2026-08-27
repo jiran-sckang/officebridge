@@ -221,6 +221,35 @@ async function handleInternal(req, res, ctx) {
     return sendJson(res, 200, { bridgeToken: result.bridgeToken, name: result.user.name, dept: result.user.dept });
   }
 
+  // Connector operator login: an admin authenticates directly (same
+  // company code + portal credentials) and gets back a personal connector
+  // token. This replaces the old single hardcoded shared CONNECTOR_TOKEN —
+  // operating a connector now requires an actual admin login, and each
+  // login is individually attributable (tunnel.js records who) and
+  // revocable (org chart / dashboard can kill it).
+  if (pathname === '/_ob/api/connector/register' && req.method === 'POST') {
+    let body;
+    try {
+      body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+    } catch {
+      res.writeHead(400);
+      return res.end('bad request');
+    }
+    if (body.companyCode !== TENANT_NAME) {
+      audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `커넥터 앱 등록 실패: 회사코드 불일치 (${body.companyCode})` });
+      res.writeHead(401);
+      return res.end('회사코드가 올바르지 않습니다.');
+    }
+    const result = auth.registerConnector(body.email, body.password);
+    if (!result.ok) {
+      audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `커넥터 앱 등록 실패: ${result.reason}` });
+      res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end(result.reason);
+    }
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '커넥터 앱 로그인' });
+    return sendJson(res, 200, { connectorToken: result.connectorToken, name: result.user.name });
+  }
+
   // Hands a session already created via the bridge exchange above to the
   // browser as a cookie, then redirects on — the bridge app never handles
   // the browser's cookie jar directly, it just opens this URL.
@@ -421,7 +450,7 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy();
     return;
   }
-  wss.handleUpgrade(req, socket, head, (ws) => tunnel.acceptConnection(ws));
+  wss.handleUpgrade(req, socket, head, (ws) => tunnel.acceptConnection(ws, token));
 });
 
 server.listen(PORT, '0.0.0.0', () => {
