@@ -198,6 +198,19 @@ function start({ isConnected }) {
 
     const { pathname } = new URL(req.url, 'http://x');
 
+    if (pathname === '/api/status' && req.method === 'GET') {
+      const services = state.getAll().map((s) => ({
+        ...s,
+        url: `https://${s.name}.${config.PUBLIC_DOMAIN}/`,
+      }));
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      return res.end(JSON.stringify({
+        connected: isConnected(),
+        relay: `${config.RELAY_HOST}:${config.RELAY_PORT}`,
+        services,
+      }));
+    }
+
     if (pathname === '/' && req.method === 'GET') {
       const [policyResult, logsResult] = await Promise.allSettled([relayClient.getPolicy(), relayClient.getLogs(20)]);
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });

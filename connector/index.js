@@ -12,8 +12,18 @@ const state = require('./state');
 const startAdminWeb = require('./admin-web');
 
 const RECONNECT_MS = 3000;
+// The relay pings every 30s (see relay/tunnel.js). If we haven't heard
+// anything in well over that, the socket is almost certainly dead on the
+// server side even though our local readyState still says OPEN — e.g. the
+// relay process was killed without a clean WS close, which the OS doesn't
+// surface to us as an error or a 'close' event on its own. Without this,
+// the connector sits there believing it's connected until someone notices
+// requests are failing.
+const HEARTBEAT_TIMEOUT_MS = 45000;
 
 let ws;
+let heartbeatTimer;
+let lastHeartbeat;
 
 function register() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -27,12 +37,27 @@ function connect() {
   console.log(`[connector] connecting to ${url}`);
   ws = new WebSocket(url, { rejectUnauthorized: config.REJECT_UNAUTHORIZED });
 
+  lastHeartbeat = Date.now();
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = setInterval(() => {
+    if (Date.now() - lastHeartbeat > HEARTBEAT_TIMEOUT_MS) {
+      console.log('[connector] no heartbeat from relay in', HEARTBEAT_TIMEOUT_MS, 'ms, forcing reconnect');
+      ws.terminate(); // triggers 'close' below, which schedules a fresh connect()
+    }
+  }, 10000);
+
   ws.on('open', () => {
     console.log('[connector] tunnel established');
+    lastHeartbeat = Date.now();
     register();
   });
 
+  ws.on('ping', () => {
+    lastHeartbeat = Date.now();
+  });
+
   ws.on('message', (raw) => {
+    lastHeartbeat = Date.now();
     let msg;
     try {
       msg = JSON.parse(raw.toString());
@@ -43,6 +68,7 @@ function connect() {
   });
 
   ws.on('close', () => {
+    clearInterval(heartbeatTimer);
     console.log(`[connector] tunnel closed, reconnecting in ${RECONNECT_MS}ms`);
     setTimeout(connect, RECONNECT_MS);
   });
