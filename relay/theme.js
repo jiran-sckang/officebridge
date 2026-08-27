@@ -96,11 +96,32 @@ const CSS = `
   .org-children { border-top: 1px solid var(--border); padding: 0; }
   .org-children .org-row-person { border-top: 1px dotted var(--border); }
   .org-children .org-row-person:first-child { border-top: none; }
-  .org-add-form { display: flex; gap: 6px; grid-column: 1 / -1; padding: 8px 16px 8px 40px; }
-  .org-add-form input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; width: 130px; }
-  .org-add-form button { display: flex; align-items: center; gap: 4px; font-size: 12px; padding: 6px 10px; }
-  .org-add-form button svg { width: 14px; height: 14px; }
-  .root-node > .org-add-form, .root-node .org-row .org-add-form { grid-column: auto; padding: 0; }
+  .btn-sm { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; font-size: 12px; }
+  .btn-sm svg { width: 13px; height: 13px; }
+  .org-row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; opacity: 0; transition: opacity .1s; }
+  .org-row:hover .org-row-actions, .org-row-actions:focus-within { opacity: 1; }
+  .org-row-dept .org-row-actions { opacity: .55; }
+  .org-row-dept:hover .org-row-actions { opacity: 1; }
+
+  .avatar {
+    display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
+    color: #fff; font-weight: 700; flex-shrink: 0; vertical-align: middle;
+  }
+
+  .org-search { padding: 2px 0 14px; }
+  .org-search input {
+    width: 100%; padding: 9px 12px 9px 34px; border: 1px solid var(--border); border-radius: 7px;
+    font-size: 13px; background: #fff;
+  }
+  .org-search input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-tint); }
+
+  dialog.modal-box { border: none; border-radius: 10px; padding: 0; width: 340px; box-shadow: 0 20px 50px rgba(16,24,40,.25); }
+  dialog.modal-box::backdrop { background: rgba(15,23,42,.45); }
+  dialog.modal-box form { padding: 22px 24px; display: flex; flex-direction: column; }
+  dialog.modal-box h3 { margin: 0 0 6px; font-size: 15px; }
+  dialog.modal-box label { font-size: 11.5px; color: var(--muted); margin: 10px 0 4px; }
+  dialog.modal-box input { padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
   .filters a { display: inline-block; padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; margin-right: 8px; font-size: 13px; color: var(--text); }
   .filters a.active { background: var(--blue); color: #fff; border-color: var(--blue); }
   .portal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 18px; }

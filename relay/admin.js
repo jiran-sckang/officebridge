@@ -23,7 +23,20 @@ const ICON = {
   company: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17"/><line x1="4" y1="21" x2="20" y2="21"/><rect x="8" y="8" width="3" height="3"/><rect x="13" y="8" width="3" height="3"/><rect x="8" y="13" width="3" height="3"/><rect x="13" y="13" width="3" height="3"/></svg>',
   folder: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>',
   person: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
+  search: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
 };
+
+const AVATAR_COLORS = ['#0c51a1', '#7c3aed', '#059669', '#c2410c', '#be123c', '#0891b2', '#a21caf', '#4d7c0f'];
+function avatarColor(seed) {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+function avatar(name, size) {
+  const initial = (name || '?').trim().slice(0, 1).toUpperCase();
+  return `<span class="avatar" style="width:${size}px;height:${size}px;background:${avatarColor(name || '?')};font-size:${Math.round(size * 0.42)}px">${initial}</span>`;
+}
 
 const NAV = [
   { path: '/dashboard', label: '대시보드', icon: ICON.dashboard },
@@ -146,6 +159,8 @@ function renderOrgChart(session) {
   const deptPolicy = policy.getDeptPolicy();
   const byDept = groupByDept(users, { includeAdmins: true });
   const totalCount = Object.keys(users).length;
+  const deptCount = Object.keys(deptPolicy).length;
+  const installedCount = Object.keys(users).filter((email) => auth.getBridgeTokenFor(email)).length;
 
   const deptNodes = Object.keys(deptPolicy).map((dept) => {
     const members = byDept.get(dept) || [];
@@ -155,55 +170,114 @@ function renderOrgChart(session) {
           const bridgeCell = token
             ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
             : '<span class="muted">미설치</span>';
-          return `<div class="org-row org-row-person">
-            <span class="org-tree-cell">${ICON.person} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
+          const searchKey = `${u.name} ${email}`.toLowerCase();
+          return `<div class="org-row org-row-person" data-search="${searchKey}">
+            <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
             <span class="muted">${email}</span>
             <span>${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}</span>
-            <span>${bridgeCell}</span>
+            <span class="org-row-actions">${bridgeCell}</span>
           </div>`;
         }).join('')
       : '<div class="org-row org-row-person"><span class="org-tree-cell muted">소속 임직원 없음</span></div>';
 
-    return `<details class="org-node">
+    return `<details class="org-node dept-node">
       <summary class="org-row org-row-dept">
-        <span class="org-tree-cell">${ICON.sessions} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
         <span class="muted">-</span>
         <span class="muted">-</span>
-        <span></span>
+        <span class="org-row-actions">
+          <button type="button" class="btn ghost btn-sm" onclick="event.preventDefault();openAddMember('${dept}')">${ICON.plus} 임직원 추가</button>
+        </span>
       </summary>
       <div class="org-children">
         ${memberRows}
-        <form class="inline org-add-form" method="POST" action="/_ob/api/admin/org/create">
-          <input type="hidden" name="dept" value="${dept}">
-          <input type="text" name="name" placeholder="이름" required>
-          <input type="text" name="email" placeholder="이메일" required>
-          <input type="text" name="password" placeholder="초기 비밀번호" required>
-          <button class="btn ghost" type="submit">${ICON.person} 임직원 추가</button>
-        </form>
       </div>
     </details>`;
   }).join('');
 
   return adminShell('/org', session, '조직도', `
+    <div class="tiles">
+      <div class="tile"><div class="tile-icon">${ICON.company}</div><div><div class="num">${totalCount}</div><div class="label">전체 임직원</div></div></div>
+      <div class="tile"><div class="tile-icon">${avatar(TENANT_NAME, 24)}</div><div><div class="num">${deptCount}</div><div class="label">부서 수</div></div></div>
+      <div class="tile"><div class="tile-icon">${ICON.access}</div><div><div class="num">${installedCount} / ${totalCount}</div><div class="label">브릿지 설치</div></div></div>
+    </div>
+
+    <div class="org-search">
+      <div style="position:relative;max-width:340px">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
+        <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" oninput="filterOrgSearch(this.value)">
+      </div>
+    </div>
+
     <div class="org-node root-node">
       <div class="org-row org-row-company">
         <span class="org-tree-cell">${ICON.company} <span class="dept-name">${TENANT_NAME}</span><span class="dept-count">${totalCount}명</span></span>
         <span class="muted">-</span>
         <span class="muted">-</span>
-        <form class="inline org-add-form" method="POST" action="/_ob/api/admin/org/dept-create">
-          <input type="text" name="dept" placeholder="새 부서명">
-          <button class="btn ghost" type="submit">${ICON.sessions} 부서 추가</button>
-        </form>
+        <span class="org-row-actions">
+          <button type="button" class="btn ghost btn-sm" onclick="document.getElementById('addDeptDialog').showModal()">${ICON.plus} 부서 추가</button>
+        </span>
       </div>
       <div class="org-children" style="padding-left:0">
         ${deptNodes}
       </div>
     </div>
+
     <div style="color:var(--muted);font-size:12px;margin-top:10px">
       임직원이 [설치 파일] 페이지에서 브릿지 앱을 받아 본인 계정(회사코드·이메일·비밀번호)으로 최초 1회 인증하면
       "설치됨"으로 바뀝니다 — 별도로 설정파일을 만들어 전달할 필요는 없습니다. 퇴사·기기 분실 시엔 "접근 회수"로
       그 앱을 즉시 무효화하세요. 부서/개인 접근 권한은 [정책 접근관리]에서 설정하세요.
     </div>
+
+    <dialog id="addDeptDialog" class="modal-box">
+      <form method="POST" action="/_ob/api/admin/org/dept-create">
+        <h3>새 부서 추가</h3>
+        <label>부서명</label>
+        <input type="text" name="dept" placeholder="예: 재무팀" required autofocus>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" onclick="document.getElementById('addDeptDialog').close()">취소</button>
+          <button class="btn" type="submit">추가</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="addMemberDialog" class="modal-box">
+      <form method="POST" action="/_ob/api/admin/org/create">
+        <h3>임직원 추가 <span id="addMemberDeptLabel" class="muted"></span></h3>
+        <input type="hidden" name="dept" id="addMemberDeptField">
+        <label>이름</label>
+        <input type="text" name="name" required>
+        <label>이메일</label>
+        <input type="email" name="email" required>
+        <label>초기 비밀번호</label>
+        <input type="text" name="password" required>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" onclick="document.getElementById('addMemberDialog').close()">취소</button>
+          <button class="btn" type="submit">추가</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script>
+      function openAddMember(dept) {
+        document.getElementById('addMemberDeptField').value = dept;
+        document.getElementById('addMemberDeptLabel').textContent = '· ' + dept;
+        document.getElementById('addMemberDialog').showModal();
+      }
+      function filterOrgSearch(q) {
+        q = q.trim().toLowerCase();
+        document.querySelectorAll('.dept-node').forEach((node) => {
+          let anyMatch = !q;
+          node.querySelectorAll('.org-row-person').forEach((row) => {
+            const match = !q || (row.dataset.search || '').includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match && q) anyMatch = true;
+          });
+          node.style.display = anyMatch ? '' : 'none';
+          if (q && anyMatch) node.open = true;
+        });
+      }
+    </script>
   `);
 }
 
