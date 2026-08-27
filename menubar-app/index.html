@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>OfficeBridge 커넥터</title>
+<style>
+  :root {
+    --blue: #0c51a1; --blue-tint: #eaf1fb; --bg: #f8fafc; --border: #e3e7ee;
+    --text: #1a1a1a; --muted: #666666; --ok: #1a8a5f; --deny: #c73434;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif;
+    background: var(--bg); color: var(--text); font-size: 13px;
+    -webkit-user-select: none; user-select: none;
+  }
+  .header { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); background: #fff; }
+  .brand { font-weight: 700; color: var(--blue); font-size: 14px; }
+  .status-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.on { background: var(--ok); }
+  .dot.off { background: var(--deny); }
+  .list { padding: 8px; overflow-y: auto; max-height: 260px; }
+  .item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 10px; border-radius: 6px; cursor: pointer; margin-bottom: 2px;
+  }
+  .item:hover { background: var(--blue-tint); }
+  .item .name { font-weight: 600; }
+  .item .addr { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+  .item .badge { font-size: 10px; padding: 2px 7px; border-radius: 4px; }
+  .badge.on { background: #e5f3ec; color: var(--ok); }
+  .badge.off { background: #f4f4f4; color: var(--muted); }
+  .empty { padding: 20px 16px; color: var(--muted); font-size: 12px; text-align: center; }
+  .footer {
+    padding: 10px 16px; border-top: 1px solid var(--border); background: #fff;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .footer a { color: var(--blue); text-decoration: none; font-size: 12px; cursor: pointer; }
+  .footer .relay { color: var(--muted); font-size: 10.5px; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">OfficeBridge 커넥터</div>
+    <div class="status-row">
+      <span class="dot" id="dot"></span>
+      <span id="statusText">확인 중…</span>
+    </div>
+  </div>
+  <div class="list" id="list">
+    <div class="empty">불러오는 중…</div>
+  </div>
+  <div class="footer">
+    <span class="relay" id="relay"></span>
+    <a id="adminLink">관리 웹 열기 →</a>
+  </div>
+
+<script>
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+  const list = document.getElementById('list');
+  const relayEl = document.getElementById('relay');
+  document.getElementById('adminLink').addEventListener('click', () => window.ob.openAdminWeb());
+
+  function render(data) {
+    if (data.error) {
+      dot.className = 'dot off';
+      statusText.textContent = '커넥터에 연결할 수 없음';
+      list.innerHTML = `<div class="empty">${data.error}</div>`;
+      relayEl.textContent = '';
+      return;
+    }
+    dot.className = 'dot ' + (data.connected ? 'on' : 'off');
+    statusText.textContent = data.connected ? '릴레이 연결됨' : '릴레이 연결 안됨';
+    relayEl.textContent = data.relay || '';
+
+    if (!data.services || !data.services.length) {
+      list.innerHTML = '<div class="empty">등록된 서비스가 없습니다.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    data.services.forEach((s) => {
+      const item = document.createElement('div');
+      item.className = 'item';
+      item.innerHTML = `
+        <div>
+          <div class="name">${s.name}</div>
+          <div class="addr">${s.internalAddress}</div>
+        </div>
+        <span class="badge ${s.enabled ? 'on' : 'off'}">${s.enabled ? 'ON' : 'OFF'}</span>
+      `;
+      item.addEventListener('click', () => window.ob.openExternal(s.url));
+      list.appendChild(item);
+    });
+  }
+
+  async function refresh() {
+    try {
+      const data = await window.ob.getStatus();
+      render(data);
+    } catch (err) {
+      render({ error: err.message });
+    }
+  }
+
+  refresh();
+  setInterval(refresh, 4000);
+</script>
+</body>
+</html>
