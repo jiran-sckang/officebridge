@@ -753,6 +753,23 @@ function downloadCard({ title, desc, fileName, steps }) {
     </div>`;
 }
 
+const PLATFORM_ICON = {
+  windows: '<svg viewBox="0 0 24 24" width="30" height="30"><rect x="2" y="2" width="9" height="9" fill="#fff"/><rect x="13" y="2" width="9" height="9" fill="#fff"/><rect x="2" y="13" width="9" height="9" fill="#fff"/><rect x="13" y="13" width="9" height="9" fill="#fff"/></svg>',
+  apple: '<svg viewBox="0 0 384 512" width="26" height="26" fill="#fff"><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg>',
+};
+
+function platformTile({ label, icon, fileName, bg }) {
+  const size = fileSizeLabel(fileName);
+  const inner = `
+    ${icon}
+    <div class="platform-label">${label}</div>
+    <div class="platform-size">${size || '준비 중'}</div>
+  `;
+  return size
+    ? `<a class="platform-tile" style="background:${bg}" href="/_ob/downloads/${fileName}">${inner}</a>`
+    : `<div class="platform-tile disabled" style="background:${bg}">${inner}</div>`;
+}
+
 function renderDownloads(session) {
   const bridgeCard = downloadCard({
     title: '임직원용 브릿지 앱',
@@ -766,23 +783,28 @@ function renderDownloads(session) {
     ],
   });
 
-  const connectorCard = downloadCard({
-    title: '커넥터 앱 (사내망 설치용, 관리자 전용)',
-    desc: `사내망 안의 장비에 설치하는 앱입니다. 관리자 계정으로 로그인해야 터널이 시작됩니다 — 로그인 전에는 아무 트래픽도 중계하지 않습니다.`,
-    fileName: 'officebridge-connector-app-mac.zip',
-    steps: [
-      '앱을 Applications 폴더로 이동 후 실행 (우클릭 → 열기)',
-      `회사코드 "${TENANT_NAME}" + 관리자 계정(이메일/비밀번호)으로 로그인해야 터널이 붙음`,
-      '앱 안에서 서비스(사내시스템) 추가/삭제/on-off — 별도 웹 관리 화면 없음',
-      '[대시보드]에서 지금 어느 관리자 계정으로 연결됐는지 보이고, "연결 강제 종료"로 즉시 로그아웃시킬 수 있음',
-    ],
-  });
-
   return adminShell('/downloads', session, '설치 파일', `
     <div style="margin-bottom:16px;color:var(--muted);font-size:13px">
-      이 릴레이(${DOMAIN})에 연결되도록 미리 설정되어 있습니다. 위는 사내망 커넥터(관리자용), 아래는 임직원 개인용입니다.
+      이 릴레이(${DOMAIN})에 연결되도록 미리 설정되어 있습니다.
     </div>
-    ${connectorCard}
+
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:4px">커넥터 앱 (사내망 설치용, 관리자 전용)</div>
+      <div style="color:var(--muted);font-size:13px;margin-bottom:14px">
+        사내망 안의 장비에 설치하는 앱입니다. 관리자 계정으로 로그인해야 터널이 시작됩니다 — 로그인 전에는 아무 트래픽도 중계하지 않습니다.
+      </div>
+      <div class="platform-grid">
+        ${platformTile({ label: 'Windows', icon: PLATFORM_ICON.windows, fileName: 'officebridge-connector-app-win.zip', bg: '#0c51a1' })}
+        ${platformTile({ label: 'Mac OS', icon: PLATFORM_ICON.apple, fileName: 'officebridge-connector-app-mac.zip', bg: '#334155' })}
+      </div>
+      <ol style="margin-top:4px;padding-left:20px;font-size:13px;color:var(--text)">
+        <li>압축을 풀고 실행 (Mac: 우클릭 → 열기 / Windows: SmartScreen 경고가 뜨면 "추가 정보" → "실행")</li>
+        <li>회사코드 "${TENANT_NAME}" + 관리자 계정(이메일/비밀번호)으로 로그인해야 터널이 붙음</li>
+        <li>앱 안에서 서비스(사내시스템) 추가/삭제/on-off — 별도 웹 관리 화면 없음</li>
+        <li>[대시보드]에서 지금 어느 관리자 계정으로 연결됐는지 보이고, "연결 강제 종료"로 즉시 로그아웃시킬 수 있음</li>
+      </ol>
+    </div>
+
     ${bridgeCard}
   `);
 }

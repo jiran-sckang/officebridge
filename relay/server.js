@@ -24,6 +24,7 @@ const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
 const DOWNLOADABLE_FILES = {
   'officebridge-bridge-mac.zip': 'application/zip',
   'officebridge-connector-app-mac.zip': 'application/zip',
+  'officebridge-connector-app-win.zip': 'application/zip',
 };
 
 // ---- small HTTP helpers ------------------------------------------------

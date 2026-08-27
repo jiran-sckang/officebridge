@@ -124,6 +124,17 @@ const CSS = `
   .org-row-wide .org-row-actions,
   .chip-cell { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; opacity: 1; }
 
+  .platform-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 14px 0 20px; }
+  .platform-tile {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    height: 150px; border-radius: 10px; color: #fff; text-decoration: none;
+    transition: transform .1s, box-shadow .1s;
+  }
+  .platform-tile:not(.disabled):hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(16,24,40,.15); }
+  .platform-tile.disabled { opacity: .5; cursor: not-allowed; }
+  .platform-label { font-size: 16px; font-weight: 700; }
+  .platform-size { font-size: 12px; opacity: .85; }
+
   .org-search { padding: 2px 0 14px; }
   .org-search input {
     width: 100%; padding: 9px 12px 9px 34px; border: 1px solid var(--border); border-radius: 7px;
