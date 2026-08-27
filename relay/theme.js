@@ -76,6 +76,31 @@ const CSS = `
   .org-children { border-top: 1px solid var(--border); padding: 4px 16px 10px 34px; }
   .member-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 13px; flex-wrap: wrap; gap: 8px; }
   .member-row + .member-row { border-top: 1px dotted var(--border); }
+
+  /* org chart: table-like tree — company > department > person, each row a
+     grid so the 이름/이메일/상태/작업 columns line up across all levels. */
+  .root-node { border: 1px solid var(--blue); }
+  .root-node > .org-row { background: var(--blue-tint); border-radius: 5px 5px 0 0; }
+  .org-row {
+    display: grid; grid-template-columns: 1fr 220px 90px 220px; align-items: center;
+    gap: 10px; padding: 10px 16px; font-size: 13px;
+  }
+  .org-row-dept { cursor: pointer; }
+  .org-node > summary.org-row::-webkit-details-marker { display: none; }
+  .org-node > summary.org-row::before { content: '▸'; margin-right: 6px; color: var(--muted); display: inline-block; transition: transform .12s; }
+  .org-node[open] > summary.org-row::before { transform: rotate(90deg); }
+  .org-tree-cell { display: flex; align-items: center; gap: 8px; }
+  .org-tree-cell svg { flex-shrink: 0; color: var(--blue); }
+  .org-row-person .org-tree-cell { padding-left: 30px; }
+  .org-row-person .org-tree-cell svg { color: var(--muted); }
+  .org-children { border-top: 1px solid var(--border); padding: 0; }
+  .org-children .org-row-person { border-top: 1px dotted var(--border); }
+  .org-children .org-row-person:first-child { border-top: none; }
+  .org-add-form { display: flex; gap: 6px; grid-column: 1 / -1; padding: 8px 16px 8px 40px; }
+  .org-add-form input { padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; width: 130px; }
+  .org-add-form button { display: flex; align-items: center; gap: 4px; font-size: 12px; padding: 6px 10px; }
+  .org-add-form button svg { width: 14px; height: 14px; }
+  .root-node > .org-add-form, .root-node .org-row .org-add-form { grid-column: auto; padding: 0; }
   .filters a { display: inline-block; padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; margin-right: 8px; font-size: 13px; color: var(--text); }
   .filters a.active { background: var(--blue); color: #fff; border-color: var(--blue); }
   .portal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 18px; }

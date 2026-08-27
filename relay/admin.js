@@ -20,6 +20,9 @@ const ICON = {
   logAdmin: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>',
   download: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
   org: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M12 8v4M12 12H5v4M12 12h7v4"/></svg>',
+  company: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="17"/><line x1="4" y1="21" x2="20" y2="21"/><rect x="8" y="8" width="3" height="3"/><rect x="13" y="8" width="3" height="3"/><rect x="8" y="13" width="3" height="3"/><rect x="13" y="13" width="3" height="3"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>',
+  person: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>',
 };
 
 const NAV = [
@@ -140,45 +143,63 @@ function logLineHtml(e) {
 
 function renderOrgChart(session) {
   const users = auth.listUsers();
-  const rows = Object.entries(users)
-    .map(([email, u]) => {
-      const token = auth.getBridgeTokenFor(email);
-      const bridgeCell = token
-        ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
-        : '<span class="muted">미설치</span>';
-      return `<tr>
-        <td>${u.name}</td>
-        <td>${email}</td>
-        <td>${u.dept}</td>
-        <td>${u.role === 'admin' ? '관리자' : '일반'}</td>
-        <td>${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}</td>
-        <td>${bridgeCell}</td>
-      </tr>`;
-    })
-    .join('');
+  const deptPolicy = policy.getDeptPolicy();
+  const byDept = groupByDept(users, { includeAdmins: true });
+  const totalCount = Object.keys(users).length;
+
+  const deptNodes = Object.keys(deptPolicy).map((dept) => {
+    const members = byDept.get(dept) || [];
+    const memberRows = members.length
+      ? members.map(([email, u]) => {
+          const token = auth.getBridgeTokenFor(email);
+          const bridgeCell = token
+            ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
+            : '<span class="muted">미설치</span>';
+          return `<div class="org-row org-row-person">
+            <span class="org-tree-cell">${ICON.person} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
+            <span class="muted">${email}</span>
+            <span>${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}</span>
+            <span>${bridgeCell}</span>
+          </div>`;
+        }).join('')
+      : '<div class="org-row org-row-person"><span class="org-tree-cell muted">소속 임직원 없음</span></div>';
+
+    return `<details class="org-node">
+      <summary class="org-row org-row-dept">
+        <span class="org-tree-cell">${ICON.sessions} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span class="muted">-</span>
+        <span class="muted">-</span>
+        <span></span>
+      </summary>
+      <div class="org-children">
+        ${memberRows}
+        <form class="inline org-add-form" method="POST" action="/_ob/api/admin/org/create">
+          <input type="hidden" name="dept" value="${dept}">
+          <input type="text" name="name" placeholder="이름" required>
+          <input type="text" name="email" placeholder="이메일" required>
+          <input type="text" name="password" placeholder="초기 비밀번호" required>
+          <button class="btn ghost" type="submit">${ICON.person} 임직원 추가</button>
+        </form>
+      </div>
+    </details>`;
+  }).join('');
 
   return adminShell('/org', session, '조직도', `
-    <div class="card">
-      <table>
-        <thead><tr><th>이름</th><th>이메일</th><th>부서</th><th>역할</th><th>상태</th><th>개인 브릿지</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
+    <div class="org-node root-node">
+      <div class="org-row org-row-company">
+        <span class="org-tree-cell">${ICON.company} <span class="dept-name">${TENANT_NAME}</span><span class="dept-count">${totalCount}명</span></span>
+        <span class="muted">-</span>
+        <span class="muted">-</span>
+        <form class="inline org-add-form" method="POST" action="/_ob/api/admin/org/dept-create">
+          <input type="text" name="dept" placeholder="새 부서명">
+          <button class="btn ghost" type="submit">${ICON.sessions} 부서 추가</button>
+        </form>
+      </div>
+      <div class="org-children" style="padding-left:0">
+        ${deptNodes}
+      </div>
     </div>
-    <div class="card">
-      <div style="margin-bottom:10px;font-weight:600">새 임직원 등록</div>
-      <form method="POST" action="/_ob/api/admin/org/create">
-        <div class="row">
-          <div><input type="text" name="name" placeholder="이름" required></div>
-          <div><input type="text" name="email" placeholder="이메일" required></div>
-        </div>
-        <div class="row">
-          <div><input type="text" name="dept" placeholder="부서 (예: 마케팅팀)" required></div>
-          <div><input type="text" name="password" placeholder="초기 비밀번호" required></div>
-        </div>
-        <button class="btn" type="submit">등록</button>
-      </form>
-    </div>
-    <div style="color:var(--muted);font-size:12px">
+    <div style="color:var(--muted);font-size:12px;margin-top:10px">
       임직원이 [설치 파일] 페이지에서 브릿지 앱을 받아 본인 계정(회사코드·이메일·비밀번호)으로 최초 1회 인증하면
       "설치됨"으로 바뀝니다 — 별도로 설정파일을 만들어 전달할 필요는 없습니다. 퇴사·기기 분실 시엔 "접근 회수"로
       그 앱을 즉시 무효화하세요. 부서/개인 접근 권한은 [정책 접근관리]에서 설정하세요.
@@ -480,6 +501,12 @@ function renderPage(pathname, session, query) {
 // ---- Actions (mutations triggered from admin forms) ------------------
 
 const actions = {
+  'org/dept-create'(body, session, ip) {
+    const dept = (body.dept || '').trim();
+    if (!dept) return;
+    policy.ensureDept(dept);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `부서 추가: ${dept}` });
+  },
   'org/create'(body, session, ip) {
     const { email, name, dept, password } = body;
     const result = auth.createUser(email, { name, dept, password });
