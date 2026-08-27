@@ -274,7 +274,7 @@ function renderOrgChart(session) {
         <label>이메일</label>
         <input type="email" name="email" required>
         <label>초기 비밀번호</label>
-        <input type="text" name="password" required>
+        <input type="password" name="password" required>
         <div class="modal-actions">
           <button type="button" class="btn ghost" onclick="document.getElementById('addMemberDialog').close()">취소</button>
           <button class="btn" type="submit">추가</button>
