@@ -62,6 +62,13 @@ function ensureDept(dept) {
   return deptPolicy[dept];
 }
 
+function deleteDept(dept) {
+  if (!deptPolicy[dept]) return false;
+  delete deptPolicy[dept];
+  persistDeptPolicy();
+  return true;
+}
+
 function toggleDeptAccess(dept, serviceName, allow) {
   const set = new Set(deptPolicy[dept] || []);
   if (allow) set.add(serviceName);
@@ -84,6 +91,16 @@ function toggleIndividualGrant(email, serviceName, allow) {
   return grants[email];
 }
 
+// Called by admin.js after auth.updateUser() re-keys a user by email —
+// grants are keyed by email too but owned by this module, so auth.js can't
+// move them itself.
+function renameGrants(oldEmail, newEmail) {
+  if (!grants[oldEmail]) return;
+  grants[newEmail] = grants[oldEmail];
+  delete grants[oldEmail];
+  persistGrants();
+}
+
 module.exports = {
   getServices,
   getService,
@@ -93,7 +110,9 @@ module.exports = {
   isAllowed,
   getDeptPolicy,
   ensureDept,
+  deleteDept,
   toggleDeptAccess,
   getGrants,
   toggleIndividualGrant,
+  renameGrants,
 };

@@ -24,6 +24,17 @@ const CSS = `
   .user-menu .menu a { display: block; padding: 8px 10px; border-radius: 4px; color: var(--text); font-size: 13px; }
   .user-menu .menu a:hover { background: var(--bg); }
 
+  /* small per-row "..." action menu — same popover shape as .user-menu,
+     reused for org-chart row actions (edit/delete) instead of a one-off style */
+  .row-menu { position: relative; display: inline-flex; }
+  .row-menu summary { cursor: pointer; list-style: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; color: var(--muted); }
+  .row-menu summary:hover { background: var(--bg); color: var(--text); }
+  .row-menu summary::-webkit-details-marker { display: none; }
+  .row-menu .menu { position: absolute; right: 0; top: 32px; background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 16px rgba(16,24,40,.10); min-width: 150px; padding: 6px; z-index: 20; }
+  .row-menu .menu button, .row-menu .menu a { display: block; width: 100%; text-align: left; padding: 8px 10px; border-radius: 4px; color: var(--text); font-size: 13px; background: none; border: none; cursor: pointer; font-family: inherit; }
+  .row-menu .menu button:hover, .row-menu .menu a:hover { background: var(--bg); }
+  .row-menu .menu button.danger-text { color: var(--deny); }
+
   .layout { display: flex; min-height: calc(100vh - 52px); }
   .sidebar { width: 232px; background: #fff; color: var(--text); padding: 12px 0; flex-shrink: 0; border-right: 1px solid var(--border); }
   .sidebar a { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 9px 22px; font-size: 14px; border-left: 3px solid transparent; }

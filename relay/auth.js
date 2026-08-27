@@ -350,12 +350,44 @@ function deleteUser(email) {
   return true;
 }
 
-function moveUserDept(email, dept) {
+// Name/dept are simple field updates. An email change re-keys the whole
+// users map (email is the primary key everywhere — tokens, sessions,
+// policy grants) so callers must also move anything keyed by email that
+// this module doesn't own (see policy.renameGrants, called from admin.js).
+function updateUser(email, { name, dept, newEmail }) {
   const user = users[email];
-  if (!user) return false;
-  user.dept = dept;
+  if (!user) return { ok: false, reason: '존재하지 않는 계정입니다.' };
+
+  let currentEmail = email;
+  if (newEmail && newEmail !== email) {
+    if (users[newEmail]) return { ok: false, reason: '이미 존재하는 이메일입니다.' };
+    delete users[email];
+    users[newEmail] = user;
+    for (const info of Object.values(bridgeTokens)) if (info.email === email) info.email = newEmail;
+    for (const info of Object.values(connectorTokens)) if (info.email === email) info.email = newEmail;
+    persistBridgeTokens();
+    persistConnectorTokens();
+    for (const [id, s] of sessions) {
+      if (s.email === email) destroySession(id); // force re-login under the new identity
+    }
+    currentEmail = newEmail;
+  }
+
+  if (name !== undefined) user.name = name;
+  if (dept !== undefined) user.dept = dept;
   persistUsers();
-  return true;
+  return { ok: true, email: currentEmail };
+}
+
+function changePassword(email, currentPassword, newPassword) {
+  const result = verifyPassword(email, currentPassword);
+  if (!result.ok) return result;
+  if (!newPassword || newPassword.length < 8) {
+    return { ok: false, reason: '새 비밀번호는 8자 이상이어야 합니다.' };
+  }
+  users[email].passwordHash = sha256(newPassword);
+  persistUsers();
+  return { ok: true };
 }
 
 function setMfaRequired(email, required) {
@@ -378,7 +410,8 @@ module.exports = {
   unblockUser,
   unlockUser,
   deleteUser,
-  moveUserDept,
+  updateUser,
+  changePassword,
   setMfaRequired,
   issueBridgeToken,
   revokeBridgeToken,

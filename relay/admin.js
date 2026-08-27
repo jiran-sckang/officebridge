@@ -26,6 +26,7 @@ const ICON = {
   plus: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
   search: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   lock: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>',
+  gear: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
 };
 
 const AVATAR_COLORS = ['#0c51a1', '#7c3aed', '#059669', '#c2410c', '#be123c', '#0891b2', '#a21caf', '#4d7c0f'];
@@ -78,6 +79,7 @@ function adminShell(activePath, session, title, bodyHtml) {
         <summary><span class="avatar">${initial(session.name)}</span>${session.name}</summary>
         <div class="menu">
           <div class="who-line">${session.name} · ${session.dept}</div>
+          <a href="/account">프로필 수정</a>
           <a href="https://portal.${DOMAIN}/">임직원 포털</a>
           <a href="/_ob/logout">로그아웃</a>
         </div>
@@ -174,7 +176,6 @@ function renderOrgChart(session) {
           const bridgeCell = token
             ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
             : '<span class="muted">미설치</span>';
-          const deptOptions = deptNames.map((d) => `<option value="${d}" ${d === dept ? 'selected' : ''}>${d}</option>`).join('');
           const searchKey = `${u.name} ${email}`.toLowerCase();
           return `<div class="org-row org-row-person" data-search="${searchKey}">
             <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
@@ -182,14 +183,16 @@ function renderOrgChart(session) {
             <span>${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}</span>
             <span class="org-row-actions">
               ${bridgeCell}
-              <form class="inline" method="POST" action="/_ob/api/admin/org/move">
-                <input type="hidden" name="email" value="${email}">
-                <select name="dept" class="btn-sm" onchange="this.form.requestSubmit()">${deptOptions}</select>
-              </form>
-              <form class="inline" method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
-                <input type="hidden" name="email" value="${email}">
-                <button class="btn danger btn-sm" type="submit">삭제</button>
-              </form>
+              <details class="row-menu">
+                <summary>${ICON.gear}</summary>
+                <div class="menu">
+                  <button type="button" onclick="event.preventDefault();openEditMember(this,'${email}','${u.name}','${dept}')">사용자 수정</button>
+                  <form method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
+                    <input type="hidden" name="email" value="${email}">
+                    <button type="submit" class="danger-text">사용자 삭제</button>
+                  </form>
+                </div>
+              </details>
             </span>
           </div>`;
         }).join('')
@@ -202,6 +205,12 @@ function renderOrgChart(session) {
         <span class="muted">-</span>
         <span class="org-row-actions">
           <button type="button" class="btn ghost btn-sm" onclick="event.preventDefault();openAddMember('${dept}')">${ICON.plus} 임직원 추가</button>
+          ${members.length === 0
+            ? `<form class="inline" method="POST" action="/_ob/api/admin/org/dept-delete" onsubmit="return confirm('${dept} 부서를 삭제할까요?')">
+                <input type="hidden" name="dept" value="${dept}">
+                <button type="submit" class="btn ghost btn-sm">부서 삭제</button>
+              </form>`
+            : ''}
         </span>
       </summary>
       <div class="org-children">
@@ -273,11 +282,37 @@ function renderOrgChart(session) {
       </form>
     </dialog>
 
+    <dialog id="editMemberDialog" class="modal-box">
+      <form method="POST" action="/_ob/api/admin/org/update">
+        <h3>사용자 수정</h3>
+        <input type="hidden" name="email" id="editMemberEmailField">
+        <label>이름</label>
+        <input type="text" name="name" id="editMemberNameField" required>
+        <label>이메일</label>
+        <input type="email" name="newEmail" id="editMemberNewEmailField" required>
+        <label>부서</label>
+        <select name="dept" id="editMemberDeptField">${deptNames.map((d) => `<option value="${d}">${d}</option>`).join('')}</select>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" onclick="document.getElementById('editMemberDialog').close()">취소</button>
+          <button class="btn" type="submit">저장</button>
+        </div>
+      </form>
+    </dialog>
+
     <script>
       function openAddMember(dept) {
         document.getElementById('addMemberDeptField').value = dept;
         document.getElementById('addMemberDeptLabel').textContent = '· ' + dept;
         document.getElementById('addMemberDialog').showModal();
+      }
+      function openEditMember(trigger, email, name, dept) {
+        const rowMenu = trigger.closest('.row-menu');
+        if (rowMenu) rowMenu.open = false;
+        document.getElementById('editMemberEmailField').value = email;
+        document.getElementById('editMemberNameField').value = name;
+        document.getElementById('editMemberNewEmailField').value = email;
+        document.getElementById('editMemberDeptField').value = dept;
+        document.getElementById('editMemberDialog').showModal();
       }
       function filterOrgSearch(q) {
         q = q.trim().toLowerCase();
@@ -374,6 +409,38 @@ function renderSecurity(session, query) {
     </div>`;
 
   return adminShell('/security', session, '2차 인증(MFA)', body);
+}
+
+function renderAccount(session, query) {
+  const pwError = query.pwError ? '<div class="error-box">현재 비밀번호가 올바르지 않거나 새 비밀번호가 너무 짧습니다(8자 이상).</div>' : '';
+  const pwOk = query.pwOk ? '<div class="card" style="background:var(--blue-tint);border-color:#bcd3ef">비밀번호가 변경되었습니다.</div>' : '';
+
+  return adminShell('/account', session, '프로필 수정', `
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:10px">기본 정보</div>
+      <form method="POST" action="/_ob/api/admin/account/update-name" style="max-width:280px">
+        <label>이름</label>
+        <input type="text" name="name" value="${session.name}" required>
+        <div class="muted" style="font-size:12px;margin:6px 0 10px">이메일: ${session.email} · 부서: ${session.dept}</div>
+        <button class="btn" type="submit">이름 저장</button>
+      </form>
+    </div>
+
+    ${pwOk}
+    <div class="card" style="margin-top:16px">
+      <div style="font-weight:600;margin-bottom:10px">비밀번호 변경</div>
+      ${pwError}
+      <form method="POST" action="/_ob/api/admin/account/change-password" style="max-width:280px">
+        <label>현재 비밀번호</label>
+        <input type="password" name="currentPassword" required>
+        <label>새 비밀번호 (8자 이상)</label>
+        <input type="password" name="newPassword" required minlength="8">
+        <label>새 비밀번호 확인</label>
+        <input type="password" name="confirmPassword" required minlength="8">
+        <button class="btn" type="submit" style="margin-top:10px">비밀번호 변경</button>
+      </form>
+    </div>
+  `);
 }
 
 function renderPolicyApps(session) {
@@ -732,6 +799,7 @@ function renderPage(pathname, session, query) {
     case '/downloads': return renderDownloads(session);
     case '/org': return renderOrgChart(session);
     case '/security': return renderSecurity(session, query);
+    case '/account': return renderAccount(session, query);
     default: return null;
   }
 }
@@ -739,6 +807,23 @@ function renderPage(pathname, session, query) {
 // ---- Actions (mutations triggered from admin forms) ------------------
 
 const actions = {
+  'account/update-name'(body, session, ip) {
+    const name = (body.name || '').trim();
+    if (!name) return;
+    auth.updateUser(session.email, { name });
+    session.name = name; // session is the live object from auth.js's sessions map — reflect it immediately
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `본인 프로필 이름 변경: ${name}` });
+  },
+  'account/change-password'(body, session, ip) {
+    const { currentPassword, newPassword, confirmPassword } = body;
+    if (newPassword !== confirmPassword) {
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: '비밀번호 변경 실패: 새 비밀번호 확인 불일치' });
+      return `https://admin.${DOMAIN}/account?pwError=1`;
+    }
+    const result = auth.changePassword(session.email, currentPassword, newPassword);
+    audit.log({ type: 'ADMIN', verdict: result.ok ? 'OK' : 'FAIL', user: session.email, service: '-', ip, reason: result.ok ? '본인 비밀번호 변경' : `비밀번호 변경 실패: ${result.reason}` });
+    return `https://admin.${DOMAIN}/account${result.ok ? '?pwOk=1' : '?pwError=1'}`;
+  },
   'security/mfa-start'(body, session, ip) {
     auth.startMfaEnroll(session.email);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 설정 시작' });
@@ -768,6 +853,16 @@ const actions = {
     policy.ensureDept(dept);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `부서 추가: ${dept}` });
   },
+  'org/dept-delete'(body, session, ip) {
+    const { dept } = body;
+    const stillHasMembers = Object.values(auth.listUsers()).some((u) => u.dept === dept);
+    if (stillHasMembers) {
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `부서 삭제 실패(소속 임직원 존재): ${dept}` });
+      return;
+    }
+    policy.deleteDept(dept);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `부서 삭제: ${dept}` });
+  },
   'org/create'(body, session, ip) {
     const { email, name, dept, password } = body;
     const result = auth.createUser(email, { name, dept, password });
@@ -783,13 +878,20 @@ const actions = {
     auth.revokeBridgeToken(email);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 토큰 회수: ${email}` });
   },
-  'org/move'(body, session, ip) {
-    const { email, dept } = body;
-    const user = auth.getUser(email);
-    if (!user || user.dept === dept) return;
-    const fromDept = user.dept;
-    auth.moveUserDept(email, dept);
-    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `부서 이동: ${email} (${fromDept} → ${dept})` });
+  'org/update'(body, session, ip) {
+    const { email, name, newEmail, dept } = body;
+    const trimmedNewEmail = (newEmail || '').trim();
+    const result = auth.updateUser(email, {
+      name: (name || '').trim() || undefined,
+      dept: (dept || '').trim() || undefined,
+      newEmail: trimmedNewEmail && trimmedNewEmail !== email ? trimmedNewEmail : undefined,
+    });
+    if (!result.ok) {
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `임직원 정보 수정 실패: ${email} (${result.reason})` });
+      return;
+    }
+    if (result.email !== email) policy.renameGrants(email, result.email);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 정보 수정: ${email} → 이름:${name}, 부서:${dept}${result.email !== email ? `, 이메일:${result.email}` : ''}` });
   },
   'org/delete'(body, session, ip) {
     const { email } = body;
