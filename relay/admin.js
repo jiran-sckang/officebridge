@@ -165,7 +165,8 @@ function renderOrgChart(session) {
   const deptCount = Object.keys(deptPolicy).length;
   const installedCount = Object.keys(users).filter((email) => auth.getBridgeTokenFor(email)).length;
 
-  const deptNodes = Object.keys(deptPolicy).map((dept) => {
+  const deptNames = Object.keys(deptPolicy);
+  const deptNodes = deptNames.map((dept) => {
     const members = byDept.get(dept) || [];
     const memberRows = members.length
       ? members.map(([email, u]) => {
@@ -173,12 +174,23 @@ function renderOrgChart(session) {
           const bridgeCell = token
             ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
             : '<span class="muted">미설치</span>';
+          const deptOptions = deptNames.map((d) => `<option value="${d}" ${d === dept ? 'selected' : ''}>${d}</option>`).join('');
           const searchKey = `${u.name} ${email}`.toLowerCase();
           return `<div class="org-row org-row-person" data-search="${searchKey}">
             <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
             <span class="muted">${email}</span>
             <span>${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}</span>
-            <span class="org-row-actions">${bridgeCell}</span>
+            <span class="org-row-actions">
+              ${bridgeCell}
+              <form class="inline" method="POST" action="/_ob/api/admin/org/move">
+                <input type="hidden" name="email" value="${email}">
+                <select name="dept" class="btn-sm" onchange="this.form.requestSubmit()">${deptOptions}</select>
+              </form>
+              <form class="inline" method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
+                <input type="hidden" name="email" value="${email}">
+                <button class="btn danger btn-sm" type="submit">삭제</button>
+              </form>
+            </span>
           </div>`;
         }).join('')
       : '<div class="org-row org-row-person"><span class="org-tree-cell muted">소속 임직원 없음</span></div>';
@@ -320,14 +332,46 @@ function renderSecurity(session, query) {
   } else {
     body = `
       <div class="card">
-        <div style="font-weight:600;margin-bottom:6px">2차 인증이 꺼져있습니다</div>
+        <div style="font-weight:600;margin-bottom:6px">${status.required ? '2차 인증이 필수로 지정되어 있습니다' : '2차 인증이 꺼져있습니다'}</div>
         <div class="muted" style="font-size:13px;margin-bottom:14px">
-          커넥터 앱은 관리자 로그인만으로 사내망 터널을 열 수 있어, 비밀번호 하나가 뚫리면 그대로 뚫립니다.
-          Google Authenticator 기반 2차 인증을 켜두는 걸 권장합니다.
+          ${status.required
+            ? '관리자가 이 계정에 2차 인증을 필수로 지정했습니다 — 등록 전까지는 커넥터 앱 로그인이 막힙니다. 지금 등록해주세요.'
+            : '커넥터 앱은 관리자 로그인만으로 사내망 터널을 열 수 있어, 비밀번호 하나가 뚫리면 그대로 뚫립니다. Google Authenticator 기반 2차 인증을 켜두는 걸 권장합니다.'}
         </div>
         ${chipForm('/security/mfa-start', {}, '2차 인증 설정 시작', false)}
       </div>`;
   }
+
+  const users = auth.listUsers();
+  const anyRequired = Object.values(users).some((u) => u.mfaRequired);
+  const userRows = Object.entries(users).map(([email, u]) => {
+    const mfaStatus = auth.getMfaStatus(email);
+    const statusTag = mfaStatus.enrolled
+      ? '<span class="tag-ok">등록됨</span>'
+      : mfaStatus.pending
+        ? '<span class="tag-warn">등록 중</span>'
+        : '<span class="muted">미등록</span>';
+    return `<div class="org-row org-row-wide org-row-person">
+      <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''} <span class="muted">(${email})</span></span>
+      <span class="chip-cell" style="justify-content:flex-end">
+        ${statusTag}
+        ${chipForm('/security/mfa-require', { email, required: u.mfaRequired ? '0' : '1' }, u.mfaRequired ? '필수 해제' : '필수로 지정', !!u.mfaRequired)}
+      </span>
+    </div>`;
+  }).join('');
+
+  body += `
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="font-weight:600">계정별 2차 인증 필수 설정</div>
+        ${chipForm('/security/mfa-require-all', { required: anyRequired ? '0' : '1' }, anyRequired ? '전체 필수 해제' : '전체 계정에 필수화', anyRequired)}
+      </div>
+      <div class="muted" style="font-size:13px;margin-bottom:10px">
+        여기서 "필수로 지정"하면 해당 계정은 커넥터 앱에 로그인하기 전에 먼저 [2차 인증] 메뉴에서 본인이 직접
+        등록해야 합니다 — 등록 값(비밀키)은 본인만 볼 수 있고 관리자에게 보이지 않습니다.
+      </div>
+      ${userRows || '<div class="muted">등록된 계정이 없습니다.</div>'}
+    </div>`;
 
   return adminShell('/security', session, '2차 인증(MFA)', body);
 }
@@ -708,6 +752,16 @@ const actions = {
     auth.disableMfa(session.email);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 비활성화' });
   },
+  'security/mfa-require'(body, session, ip) {
+    const { email, required } = body;
+    auth.setMfaRequired(email, required === '1');
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `MFA 필수 설정: ${email} → ${required === '1' ? '필수' : '해제'}` });
+  },
+  'security/mfa-require-all'(body, session, ip) {
+    const required = body.required === '1';
+    Object.keys(auth.listUsers()).forEach((email) => auth.setMfaRequired(email, required));
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `전체 계정 MFA 필수 ${required ? '설정' : '해제'}` });
+  },
   'org/dept-create'(body, session, ip) {
     const dept = (body.dept || '').trim();
     if (!dept) return;
@@ -728,6 +782,25 @@ const actions = {
     const { email } = body;
     auth.revokeBridgeToken(email);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 토큰 회수: ${email}` });
+  },
+  'org/move'(body, session, ip) {
+    const { email, dept } = body;
+    const user = auth.getUser(email);
+    if (!user || user.dept === dept) return;
+    const fromDept = user.dept;
+    auth.moveUserDept(email, dept);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `부서 이동: ${email} (${fromDept} → ${dept})` });
+  },
+  'org/delete'(body, session, ip) {
+    const { email } = body;
+    const user = auth.getUser(email);
+    if (!user) return;
+    if (email === session.email) {
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `본인 계정 삭제 시도 거부: ${email}` });
+      return;
+    }
+    auth.deleteUser(email);
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 삭제: ${user.name} (${email})` });
   },
   'org/dept-block'(body, session, ip) {
     const { dept, action } = body;

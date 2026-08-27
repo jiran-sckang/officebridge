@@ -96,10 +96,10 @@ const CSS = `
   .org-children .org-row-person:first-child { border-top: none; }
   .btn-sm { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; font-size: 12px; }
   .btn-sm svg { width: 13px; height: 13px; }
-  .org-row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; opacity: 0; transition: opacity .1s; }
-  .org-row:hover .org-row-actions, .org-row-actions:focus-within { opacity: 1; }
-  .org-row-dept .org-row-actions { opacity: .55; }
-  .org-row-dept:hover .org-row-actions { opacity: 1; }
+  /* Always visible, not hover-reveal — these are primary CRUD actions
+     (add dept, add/move/delete member) and hiding them behind hover made
+     them hard to discover. */
+  .org-row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; flex-wrap: wrap; }
 
   .avatar {
     display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;

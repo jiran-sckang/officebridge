@@ -203,6 +203,9 @@ function registerConnector(email, password, totpCode) {
   const result = verifyPassword(email, password);
   if (!result.ok) return result;
   if (result.user.role !== 'admin') return { ok: false, reason: '커넥터는 관리자 계정으로만 실행할 수 있습니다.' };
+  if (result.user.mfaRequired && !result.user.mfaSecret) {
+    return { ok: false, reason: '관리자가 이 계정에 2차 인증을 필수로 지정했습니다. 포탈에 로그인해서 [2차 인증] 메뉴에서 먼저 등록해주세요.' };
+  }
   if (result.user.mfaSecret) {
     if (!totpCode) return { ok: false, needsMfa: true, reason: 'MFA 인증 코드를 입력해주세요.' };
     if (!totp.verifyTotp(result.user.mfaSecret, totpCode)) {
@@ -250,8 +253,14 @@ function disableMfa(email) {
 
 function getMfaStatus(email) {
   const user = users[email];
-  if (!user) return { enrolled: false, pending: false };
-  return { enrolled: !!user.mfaSecret, pending: !!user.mfaPendingSecret, pendingSecret: user.mfaPendingSecret, pendingUri: user.mfaPendingSecret ? totp.otpauthUri(user.mfaPendingSecret, email) : null };
+  if (!user) return { enrolled: false, pending: false, required: false };
+  return {
+    enrolled: !!user.mfaSecret,
+    pending: !!user.mfaPendingSecret,
+    pendingSecret: user.mfaPendingSecret,
+    pendingUri: user.mfaPendingSecret ? totp.otpauthUri(user.mfaPendingSecret, email) : null,
+    required: !!user.mfaRequired,
+  };
 }
 
 // Used by tunnel.js to accept either a dynamically-issued operator token or
@@ -329,6 +338,34 @@ function unlockUser(email) {
   return true;
 }
 
+function deleteUser(email) {
+  if (!users[email]) return false;
+  delete users[email];
+  persistUsers();
+  for (const [id, s] of sessions) {
+    if (s.email === email) destroySession(id);
+  }
+  revokeBridgeToken(email);
+  revokeConnectorToken(email);
+  return true;
+}
+
+function moveUserDept(email, dept) {
+  const user = users[email];
+  if (!user) return false;
+  user.dept = dept;
+  persistUsers();
+  return true;
+}
+
+function setMfaRequired(email, required) {
+  const user = users[email];
+  if (!user) return false;
+  user.mfaRequired = required;
+  persistUsers();
+  return true;
+}
+
 module.exports = {
   getUser,
   listUsers,
@@ -340,6 +377,9 @@ module.exports = {
   blockUser,
   unblockUser,
   unlockUser,
+  deleteUser,
+  moveUserDept,
+  setMfaRequired,
   issueBridgeToken,
   revokeBridgeToken,
   getBridgeTokenFor,
