@@ -257,15 +257,11 @@ async function handleInternal(req, res, ctx) {
     return res.end('not found');
   }
 
-  // Admin-only file downloads (connector install packages). Gated by
-  // session, not by the /_ob/api/admin/ token dispatch below, since these
-  // aren't form-post actions — they stream a binary response.
+  // Public file downloads (the bridge app installer). No session required —
+  // the installer itself carries no secrets (no per-employee config baked
+  // in), so it's safe to link directly. The real gate is
+  // /_ob/api/bridge/register (company code + password) once it's running.
   if (pathname.startsWith('/_ob/downloads/')) {
-    const session = auth.getSession(sessionId);
-    if (!session || session.role !== 'admin') {
-      res.writeHead(403);
-      return res.end('forbidden');
-    }
     const fileName = pathname.replace('/_ob/downloads/', '');
     const contentType = DOWNLOADABLE_FILES[fileName];
     if (!contentType) {
@@ -277,7 +273,7 @@ async function handleInternal(req, res, ctx) {
       res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       return res.end('파일이 아직 서버에 준비되지 않았습니다.');
     }
-    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `커넥터 설치파일 다운로드: ${fileName}` });
+    audit.log({ type: 'SYSTEM', verdict: 'OK', user: '-', service: '-', ip, reason: `설치파일 다운로드: ${fileName}` });
     const stat = fs.statSync(filePath);
     res.writeHead(200, {
       'Content-Type': contentType,
