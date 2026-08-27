@@ -1,5 +1,3 @@
-const { TENANT_NAME } = require('./config');
-
 const CSS = `
   :root {
     --blue: #0c51a1; --blue-dark: #08386f; --blue-tint: #eaf1fb;
@@ -140,7 +138,6 @@ const CSS = `
   .login-box { background: #fff; padding: 40px; border-radius: 6px; width: 360px; border: 1px solid var(--border); }
   .login-box h1 { color: var(--blue); font-size: 22px; }
   .login-box .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
-  .demo-chip { display: inline-block; margin: 3px 4px 12px 0; padding: 5px 10px; font-size: 11px; border: 1px dashed var(--blue); color: var(--blue); border-radius: 4px; cursor: pointer; background: #fff; }
   .error-box { background: #fdeaea; color: var(--deny); padding: 10px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 14px; }
   .block-box { background: #fff; padding: 44px 50px; border-radius: 6px; text-align: center; width: 420px; border: 1px solid var(--border); }
   .block-box .icon { font-size: 40px; }
@@ -166,41 +163,26 @@ function shell(title, bodyHtml) {
 </html>`;
 }
 
-function loginPage({ next = '/', error = '' } = {}) {
+function loginPage({ next = '/', error = '', companyCode = '' } = {}) {
   next = escapeHtml(next);
   error = escapeHtml(error);
-  const demoAccounts = [
-    ['kim.sales@demo.co.kr', '김영업 (영업팀)'],
-    ['lee.dev@demo.co.kr', '이개발 (개발팀)'],
-    ['park.hr@demo.co.kr', '박인사 (인사팀)'],
-    ['admin@demo.co.kr', '박 과장 (관리자)'],
-  ];
-  const chips = demoAccounts
-    .map(([email, label]) => `<span class="demo-chip" onclick="fillDemo('${email}')">${label}</span>`)
-    .join('');
+  companyCode = escapeHtml(companyCode);
 
   return shell('로그인', `
     <div class="center-page">
       <div class="login-box">
         <h1>OfficeBridge</h1>
-        <div class="sub">${TENANT_NAME} 임직원 전용 · VPN 없이 브라우저로 접속</div>
+        <div class="sub">VPN 없이 브라우저로 접속</div>
         ${error ? `<div class="error-box">${error}</div>` : ''}
         <form method="POST" action="/_ob/login">
           <input type="hidden" name="next" value="${next}">
+          <input type="text" name="companyCode" id="companyCode" placeholder="회사코드" value="${companyCode}" required>
           <input type="email" name="email" id="email" placeholder="이메일" required>
           <input type="password" name="password" id="password" placeholder="비밀번호" required>
           <button class="btn" style="width:100%" type="submit">로그인</button>
         </form>
-        <div style="margin-top:16px">${chips}</div>
-        <div style="color:#aaa;font-size:11px">데모 계정 비밀번호: demo1234</div>
       </div>
     </div>
-    <script>
-      function fillDemo(email) {
-        document.getElementById('email').value = email;
-        document.getElementById('password').value = 'demo1234';
-      }
-    </script>
   `);
 }
 
