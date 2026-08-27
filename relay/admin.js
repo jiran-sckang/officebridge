@@ -441,11 +441,23 @@ function renderDownloads(session) {
     ],
   });
 
+  const connectorCard = downloadCard({
+    title: '커넥터 앱 (사내망 설치용, 관리자 전용)',
+    desc: `사내망 안의 장비에 설치하는 앱입니다. 관리자 계정으로 로그인해야 터널이 시작됩니다 — 로그인 전에는 아무 트래픽도 중계하지 않습니다.`,
+    fileName: 'officebridge-connector-app-mac.zip',
+    steps: [
+      '앱을 Applications 폴더로 이동 후 실행 (우클릭 → 열기)',
+      `회사코드 "${TENANT_NAME}" + 관리자 계정(이메일/비밀번호)으로 로그인해야 터널이 붙음`,
+      '앱 안에서 서비스(사내시스템) 추가/삭제/on-off — 별도 웹 관리 화면 없음',
+      '[대시보드]에서 지금 어느 관리자 계정으로 연결됐는지 보이고, "연결 강제 종료"로 즉시 로그아웃시킬 수 있음',
+    ],
+  });
+
   return adminShell('/downloads', session, '설치 파일', `
     <div style="margin-bottom:16px;color:var(--muted);font-size:13px">
-      임직원에게 배포할 앱입니다. 이 릴레이(${DOMAIN})에 연결되도록 미리 설정되어 있습니다.
-      (사내망 커넥터 배포는 별도로 진행합니다 — 이 페이지에서 제공하지 않습니다.)
+      이 릴레이(${DOMAIN})에 연결되도록 미리 설정되어 있습니다. 위는 사내망 커넥터(관리자용), 아래는 임직원 개인용입니다.
     </div>
+    ${connectorCard}
     ${bridgeCard}
   `);
 }

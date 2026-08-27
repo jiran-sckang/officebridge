@@ -17,11 +17,13 @@ const { DOMAIN, PORT, COOKIE_NAME, TENANT_NAME } = require('./config');
 
 const CERT_DIR = path.join(__dirname, '..', 'certs');
 const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
-// Only the employee-facing bridge app is offered here. Connector deployment
-// (connector-kit, the operator menu bar app) is handled out-of-band by the
-// vendor, not self-served through this page.
+// Both apps are safe to serve publicly: neither installer embeds a secret
+// (no per-employee config baked in, no shared static token) — the real
+// security boundary is login, at /_ob/api/bridge/register and
+// /_ob/api/connector/register respectively.
 const DOWNLOADABLE_FILES = {
   'officebridge-bridge-mac.zip': 'application/zip',
+  'officebridge-connector-app-mac.zip': 'application/zip',
 };
 
 // ---- small HTTP helpers ------------------------------------------------
