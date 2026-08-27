@@ -1,15 +1,19 @@
 // OfficeBridge Agent Bridge — personal desktop client (F-11).
-// Imports a per-employee bridge config (issued from the relay's admin
-// console org chart page) and lets the employee open their allowed
-// internal systems with one click, without a separate portal login.
-// Every click does a fresh token exchange, so there's no local session to
-// keep valid or expire — the config file's bridgeToken is the only thing
-// that needs to stay around.
+// One-time setup: the employee enters their company code + normal portal
+// email/password, and the app trades that directly for a personal bridge
+// token — no admin has to generate and hand over a per-employee file.
+// After that, every click does a fresh token exchange, so there's no local
+// session to keep valid or expire — only the bridgeToken needs to persist.
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const { app, ipcMain, shell, dialog } = require('electron');
+const { app, ipcMain, shell } = require('electron');
 const { menubar } = require('menubar');
+
+// The relay this app talks to — baked in at build time for this prototype.
+// A real multi-tenant build would resolve this from the company code via a
+// directory service instead of hardcoding one relay.
+const RELAY_DOMAIN = process.env.OB_RELAY_DOMAIN || '10-52-249-21.sslip.io';
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'bridge-config.json');
 
@@ -18,7 +22,7 @@ function loadConfig() {
     const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
     if (raw && raw.relayDomain && raw.bridgeToken) return raw;
   } catch {
-    // no config yet, or unreadable — treat as not configured
+    // no config yet, or unreadable — treat as not set up
   }
   return null;
 }
@@ -35,7 +39,7 @@ const mb = menubar({
   icon: path.join(__dirname, 'assets', 'iconTemplate.png'),
   browserWindow: {
     width: 300,
-    height: 400,
+    height: 420,
     resizable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -44,29 +48,6 @@ const mb = menubar({
     },
   },
   tooltip: 'OfficeBridge',
-});
-
-function promptImportConfig() {
-  const files = dialog.showOpenDialogSync(mb.window, {
-    title: 'OfficeBridge 브릿지 설정파일 선택',
-    filters: [{ name: 'OfficeBridge 브릿지 설정', extensions: ['json'] }],
-    properties: ['openFile'],
-  });
-  if (!files || !files[0]) return false;
-  try {
-    const raw = JSON.parse(fs.readFileSync(files[0], 'utf8'));
-    if (!raw.relayDomain || !raw.bridgeToken) throw new Error('missing fields');
-    config = raw;
-    saveConfig(config);
-    return true;
-  } catch {
-    dialog.showErrorBox('가져오기 실패', '유효한 OfficeBridge 브릿지 설정파일이 아닙니다.');
-    return false;
-  }
-}
-
-mb.on('ready', () => {
-  if (!config) promptImportConfig();
 });
 
 // Self-signed relay cert in this prototype — scoped to just this outbound
@@ -80,9 +61,10 @@ function postJson(hostname, urlPath, body) {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
-          if (res.statusCode !== 200) return reject(new Error(`relay responded ${res.statusCode}`));
+          const text = Buffer.concat(chunks).toString('utf8');
+          if (res.statusCode !== 200) return reject(new Error(text || `relay responded ${res.statusCode}`));
           try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+            resolve(JSON.parse(text));
           } catch (err) {
             reject(err);
           }
@@ -96,7 +78,7 @@ function postJson(hostname, urlPath, body) {
 }
 
 async function exchange() {
-  if (!config) return { needsConfig: true };
+  if (!config) return { needsAuth: true };
   const result = await postJson(config.relayDomain, '/_ob/api/bridge/exchange', { token: config.bridgeToken });
   return { name: result.name, dept: result.dept, services: result.services };
 }
@@ -112,17 +94,16 @@ ipcMain.handle('bridge:getStatus', async () => {
 ipcMain.handle('bridge:openService', async (_event, serviceUrl) => {
   // Fresh exchange right before opening — the sessionId only needs to be
   // valid for this one handoff, so there's nothing to keep fresh locally.
-  try {
-    const result = await postJson(config.relayDomain, '/_ob/api/bridge/exchange', { token: config.bridgeToken });
-    const enterUrl = `https://${config.relayDomain}/_ob/bridge-enter?sid=${encodeURIComponent(result.sessionId)}&next=${encodeURIComponent(serviceUrl)}`;
-    await shell.openExternal(enterUrl);
-  } catch (err) {
-    dialog.showErrorBox('접속 실패', err.message);
-  }
+  const result = await postJson(config.relayDomain, '/_ob/api/bridge/exchange', { token: config.bridgeToken });
+  const enterUrl = `https://${config.relayDomain}/_ob/bridge-enter?sid=${encodeURIComponent(result.sessionId)}&next=${encodeURIComponent(serviceUrl)}`;
+  await shell.openExternal(enterUrl);
 });
 
-ipcMain.handle('bridge:importConfig', async () => {
-  return promptImportConfig();
+ipcMain.handle('bridge:register', async (_event, { companyCode, email, password }) => {
+  const result = await postJson(RELAY_DOMAIN, '/_ob/api/bridge/register', { companyCode, email, password });
+  config = { relayDomain: RELAY_DOMAIN, bridgeToken: result.bridgeToken };
+  saveConfig(config);
+  return { name: result.name, dept: result.dept };
 });
 
 ipcMain.handle('bridge:forget', async () => {

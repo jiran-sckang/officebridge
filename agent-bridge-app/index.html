@@ -23,53 +23,92 @@
   }
   .item:hover { background: var(--blue-tint); }
   .empty { padding: 24px 16px; color: var(--muted); font-size: 12.5px; text-align: center; line-height: 1.6; }
-  .empty button {
-    margin-top: 10px; background: var(--blue); color: #fff; border: none;
-    padding: 8px 16px; border-radius: 6px; font-size: 12.5px; cursor: pointer;
-  }
   .footer {
     padding: 10px 16px; border-top: 1px solid var(--border); background: #fff;
     display: flex; justify-content: space-between; align-items: center; font-size: 11.5px;
   }
   .footer a { color: var(--muted); text-decoration: none; cursor: pointer; }
+
+  .login { padding: 20px 18px; }
+  .login .brand { font-size: 16px; margin-bottom: 2px; }
+  .login .sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .login label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; margin-top: 10px; }
+  .login input {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; background: #fff; color: var(--text);
+  }
+  .login button {
+    width: 100%; margin-top: 16px; background: var(--blue); color: #fff; border: none;
+    padding: 9px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .login .error { color: var(--deny); font-size: 12px; margin-top: 10px; min-height: 16px; }
 </style>
 </head>
 <body>
-  <div class="header">
+  <div id="loginView" class="login" style="display:none">
     <div class="brand">OfficeBridge</div>
-    <div class="who" id="who">확인 중…</div>
+    <div class="sub">회사코드와 포털 계정으로 최초 1회만 인증하면, 이후로는 로그인 없이 접속됩니다.</div>
+    <form id="loginForm">
+      <label>회사코드</label>
+      <input type="text" id="companyCode" placeholder="예: AMD" required>
+      <label>이메일</label>
+      <input type="email" id="email" placeholder="you@company.com" required>
+      <label>비밀번호</label>
+      <input type="password" id="password" required>
+      <button type="submit">인증하고 시작</button>
+      <div class="error" id="loginError"></div>
+    </form>
   </div>
-  <div class="list" id="list"></div>
-  <div class="footer">
-    <a id="importLink">설정파일 가져오기</a>
-    <a id="forgetLink">로그아웃</a>
+
+  <div id="mainView" style="display:none">
+    <div class="header">
+      <div class="brand">OfficeBridge</div>
+      <div class="who" id="who">확인 중…</div>
+    </div>
+    <div class="list" id="list"></div>
+    <div class="footer">
+      <span></span>
+      <a id="forgetLink">로그아웃</a>
+    </div>
   </div>
 
 <script>
+  const loginView = document.getElementById('loginView');
+  const mainView = document.getElementById('mainView');
   const who = document.getElementById('who');
   const list = document.getElementById('list');
-  document.getElementById('importLink').addEventListener('click', async () => {
-    const ok = await window.bridge.importConfig();
-    if (ok) refresh();
-  });
+  const loginError = document.getElementById('loginError');
+
   document.getElementById('forgetLink').addEventListener('click', async () => {
     await window.bridge.forget();
     refresh();
   });
 
-  function render(data) {
-    if (data.needsConfig) {
-      who.textContent = '설정 필요';
-      list.innerHTML = `<div class="empty">
-        아직 이 컴퓨터에 브릿지 설정파일이 없습니다.<br>관리자에게 받은 설정파일을 가져와주세요.
-        <br><button id="importBtn">설정파일 가져오기</button>
-      </div>`;
-      document.getElementById('importBtn').addEventListener('click', async () => {
-        const ok = await window.bridge.importConfig();
-        if (ok) refresh();
-      });
-      return;
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.textContent = '';
+    const companyCode = document.getElementById('companyCode').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    try {
+      await window.bridge.register(companyCode, email, password);
+      refresh();
+    } catch (err) {
+      loginError.textContent = err.message
+        .replace(/^Error invoking remote method[^:]*:\s*/, '')
+        .replace(/^Error:\s*/, '');
     }
+  });
+
+  function showLogin() {
+    loginView.style.display = 'block';
+    mainView.style.display = 'none';
+  }
+
+  function showMain(data) {
+    loginView.style.display = 'none';
+    mainView.style.display = 'block';
+
     if (data.error) {
       who.textContent = '연결 실패';
       list.innerHTML = `<div class="empty">${data.error}</div>`;
@@ -91,11 +130,17 @@
   }
 
   async function refresh() {
+    let data;
     try {
-      render(await window.bridge.getStatus());
+      data = await window.bridge.getStatus();
     } catch (err) {
-      render({ error: err.message });
+      data = { error: err.message };
     }
+    if (data.needsAuth) {
+      showLogin();
+      return;
+    }
+    showMain(data);
   }
 
   refresh();
