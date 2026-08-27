@@ -118,6 +118,10 @@ function handleRequest(envelope) {
     headers: { ...headers, host: target.host },
   };
   if (target.port) requestOptions.port = target.port;
+  // Internal systems on real customer networks very often run self-signed
+  // or internal-CA HTTPS — this connection is inside the customer's own
+  // trusted network anyway, so we don't validate it against public CAs.
+  if (target.protocol === 'https:') requestOptions.rejectUnauthorized = false;
 
   const outbound = client.request(requestOptions, (res) => {
     const chunks = [];

@@ -85,6 +85,11 @@ function handleRequest(envelope) {
   const body = envelope.body ? Buffer.from(envelope.body, 'base64') : null;
   const requestOptions = { hostname: target.hostname, path: reqPath, method, headers: { ...headers, host: target.host } };
   if (target.port) requestOptions.port = target.port;
+  // Internal systems on real customer networks very often run self-signed
+  // or internal-CA HTTPS — this connection is inside the customer's own
+  // trusted network anyway, so we don't try to validate it against public
+  // CAs (same call we already made for the relay's own self-signed cert).
+  if (target.protocol === 'https:') requestOptions.rejectUnauthorized = false;
 
   const outbound = client.request(requestOptions, (res) => {
     const chunks = [];
