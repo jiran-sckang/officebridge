@@ -5,7 +5,7 @@
     "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
     "role": "user",
     "blocked": false,
-    "failedAttempts": 1,
+    "failedAttempts": 0,
     "lockedUntil": null,
     "lastFailureAt": 1787800781918
   },
