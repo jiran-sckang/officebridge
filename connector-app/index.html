@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>OfficeBridge Connector</title>
+<style>
+  :root {
+    --blue: #0c51a1; --blue-tint: #eaf1fb; --bg: #f8fafc; --border: #e3e7ee;
+    --text: #1a1a1a; --muted: #666666; --deny: #c73434; --ok: #1a8a5f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, 'Malgun Gothic', sans-serif;
+    background: var(--bg); color: var(--text); font-size: 13px;
+    -webkit-user-select: none; user-select: none;
+  }
+  .header { padding: 14px 16px; border-bottom: 1px solid var(--border); background: #fff; }
+  .brand { font-weight: 700; color: var(--blue); font-size: 14px; }
+  .status-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .dot.on { background: var(--ok); }
+  .dot.off { background: var(--deny); }
+  .section { padding: 10px 16px 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; }
+  .list { padding: 4px 8px; }
+  .item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 8px; border-radius: 6px; margin-bottom: 2px;
+  }
+  .item .name { font-weight: 600; }
+  .item .addr { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+  .pill { padding: 3px 9px; border-radius: 4px; font-size: 11px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
+  .pill.on { background: #e5f3ec; color: var(--ok); border-color: #b7e1c9; }
+  .pill.off { background: #f4f4f4; color: var(--muted); }
+  .del { color: var(--deny); font-size: 11px; cursor: pointer; margin-left: 6px; }
+  .add-form { display: flex; gap: 4px; padding: 6px 16px 12px; }
+  .add-form input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 11.5px; }
+  .add-form button { background: var(--blue); color: #fff; border: none; padding: 6px 10px; border-radius: 5px; font-size: 11.5px; cursor: pointer; }
+  .empty { padding: 16px; color: var(--muted); font-size: 12px; text-align: center; }
+  .footer {
+    padding: 10px 16px; border-top: 1px solid var(--border); background: #fff;
+    display: flex; justify-content: flex-end; font-size: 11.5px;
+  }
+  .footer a { color: var(--muted); text-decoration: none; cursor: pointer; }
+
+  .login { padding: 20px 18px; }
+  .login .brand { font-size: 16px; margin-bottom: 2px; }
+  .login .sub { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .login label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 4px; margin-top: 10px; }
+  .login input { width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  .login button { width: 100%; margin-top: 16px; background: var(--blue); color: #fff; border: none; padding: 9px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .login .error { color: var(--deny); font-size: 12px; margin-top: 10px; min-height: 16px; }
+</style>
+</head>
+<body>
+  <div id="loginView" class="login" style="display:none">
+    <div class="brand">OfficeBridge Connector</div>
+    <div class="sub">관리자 계정으로 로그인해야 터널이 시작됩니다.</div>
+    <form id="loginForm">
+      <label>회사코드</label>
+      <input type="text" id="companyCode" placeholder="예: AMD" required>
+      <label>관리자 이메일</label>
+      <input type="email" id="email" required>
+      <label>비밀번호</label>
+      <input type="password" id="password" required>
+      <button type="submit">로그인 후 터널 시작</button>
+      <div class="error" id="loginError"></div>
+    </form>
+  </div>
+
+  <div id="mainView" style="display:none">
+    <div class="header">
+      <div class="brand">OfficeBridge Connector</div>
+      <div class="status-row"><span class="dot" id="dot"></span><span id="statusText"></span></div>
+    </div>
+    <div class="section">등록된 서비스</div>
+    <div class="list" id="list"></div>
+    <form class="add-form" id="addForm">
+      <input type="text" id="svcName" placeholder="이름 (예: erp)" required>
+      <input type="text" id="svcAddr" placeholder="내부주소" required>
+      <button type="submit">추가</button>
+    </form>
+    <div class="footer"><a id="logoutLink">로그아웃 (터널 종료)</a></div>
+  </div>
+
+<script>
+  const loginView = document.getElementById('loginView');
+  const mainView = document.getElementById('mainView');
+  const dot = document.getElementById('dot');
+  const statusText = document.getElementById('statusText');
+  const list = document.getElementById('list');
+  const loginError = document.getElementById('loginError');
+
+  document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    loginError.textContent = '';
+    const companyCode = document.getElementById('companyCode').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    try {
+      await window.connectorApp.register(companyCode, email, password);
+      refresh();
+    } catch (err) {
+      loginError.textContent = err.message
+        .replace(/^Error invoking remote method[^:]*:\s*/, '')
+        .replace(/^Error:\s*/, '');
+    }
+  });
+
+  document.getElementById('logoutLink').addEventListener('click', async () => {
+    await window.connectorApp.logout();
+    refresh();
+  });
+
+  document.getElementById('addForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('svcName').value.trim();
+    const addr = document.getElementById('svcAddr').value.trim();
+    if (!name || !addr) return;
+    await window.connectorApp.addService(name, addr);
+    document.getElementById('svcName').value = '';
+    document.getElementById('svcAddr').value = '';
+    refresh();
+  });
+
+  function renderList(items) {
+    if (!items.length) {
+      list.innerHTML = '<div class="empty">등록된 서비스가 없습니다.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    items.forEach((s) => {
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = `
+        <div><div class="name">${s.name}</div><div class="addr">${s.internalAddress}</div></div>
+        <div>
+          <button class="pill ${s.enabled ? 'on' : 'off'}" data-name="${s.name}" data-enabled="${s.enabled}">${s.enabled ? 'ON' : 'OFF'}</button>
+          <span class="del" data-del="${s.name}">삭제</span>
+        </div>`;
+      list.appendChild(row);
+    });
+    list.querySelectorAll('button[data-name]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await window.connectorApp.toggleService(btn.dataset.name, btn.dataset.enabled !== 'true');
+        refresh();
+      });
+    });
+    list.querySelectorAll('[data-del]').forEach((el) => {
+      el.addEventListener('click', async () => {
+        await window.connectorApp.removeService(el.dataset.del);
+        refresh();
+      });
+    });
+  }
+
+  async function refresh() {
+    const data = await window.connectorApp.getStatus();
+    if (data.loggedOut) {
+      loginView.style.display = 'block';
+      mainView.style.display = 'none';
+      if (data.revokedMessage) loginError.textContent = data.revokedMessage;
+      return;
+    }
+    loginView.style.display = 'none';
+    mainView.style.display = 'block';
+    dot.className = 'dot ' + (data.connected ? 'on' : 'off');
+    statusText.textContent = `${data.operatorName}님 · ${data.connected ? '릴레이 연결됨' : '연결 중…'}`;
+    renderList(data.services || []);
+  }
+
+  refresh();
+  setInterval(refresh, 4000);
+</script>
+</body>
+</html>

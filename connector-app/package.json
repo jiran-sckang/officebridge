@@ -1,0 +1,18 @@
+{
+  "name": "officebridge-connector-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OfficeBridge Connector — login-gated desktop app. The outbound tunnel only runs while an admin is authenticated.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^32.0.0",
+    "menubar": "^9.5.1",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "electron-packager": "^17.1.2"
+  }
+}
