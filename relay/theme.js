@@ -66,6 +66,16 @@ const CSS = `
   .tag-ok { background: #e5f3ec; color: var(--ok); }
   .tag-deny { background: #fdeaea; color: var(--deny); }
   .tag-warn { background: #fdf3e0; color: var(--warn); }
+  .org-node { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; background: var(--card); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+  .org-node > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .org-node > summary::-webkit-details-marker { display: none; }
+  .org-node > summary::before { content: '▸'; margin-right: 8px; color: var(--muted); display: inline-block; transition: transform .12s; }
+  .org-node[open] > summary::before { transform: rotate(90deg); }
+  .org-node .dept-name { font-weight: 700; }
+  .org-node .dept-count { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .org-children { border-top: 1px solid var(--border); padding: 4px 16px 10px 34px; }
+  .member-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 13px; flex-wrap: wrap; gap: 8px; }
+  .member-row + .member-row { border-top: 1px dotted var(--border); }
   .filters a { display: inline-block; padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; margin-right: 8px; font-size: 13px; color: var(--text); }
   .filters a.active { background: var(--blue); color: #fff; border-color: var(--blue); }
   .portal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap: 18px; }
