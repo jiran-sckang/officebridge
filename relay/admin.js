@@ -392,39 +392,74 @@ function renderPolicyAccess(session) {
   const users = auth.listUsers();
   const serviceNames = Object.keys(services);
   const byDept = groupByDept(users, { includeAdmins: false });
+  const deptCount = Object.keys(deptPolicy).length;
+  const totalMembers = Array.from(byDept.values()).reduce((n, m) => n + m.length, 0);
 
   const nodes = Object.keys(deptPolicy).map((dept) => {
     const members = byDept.get(dept) || [];
     const deptChips = serviceNames.map((name) => {
       const on = (deptPolicy[dept] || []).includes(name);
       return chipForm('/policy/dept', { dept, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
-    }).join(' ');
+    }).join('');
 
     const memberRows = members.length
       ? members.map(([email, u]) => {
           const cells = serviceNames.map((name) => {
             const on = (grants[email] || []).includes(name);
             return chipForm('/policy/individual', { email, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
-          }).join(' ');
-          return `<div class="member-row"><span>${u.name} <span class="muted">(${email})</span></span><span>${cells}</span></div>`;
+          }).join('');
+          const searchKey = `${u.name} ${email}`.toLowerCase();
+          return `<div class="org-row org-row-wide org-row-person" data-search="${searchKey}">
+            <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name} <span class="muted">(${email})</span></span>
+            <span class="chip-cell">${cells || '<span class="muted">등록된 사내시스템 없음</span>'}</span>
+          </div>`;
         }).join('')
-      : '<div class="member-row"><span class="muted">소속 임직원 없음</span></div>';
+      : '<div class="org-row org-row-wide org-row-person"><span class="org-tree-cell muted">소속 임직원 없음</span><span></span></div>';
 
-    return `<details class="org-node">
-      <summary>
-        <span><span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
-        <span>${deptChips}</span>
+    return `<details class="org-node dept-node">
+      <summary class="org-row org-row-wide org-row-dept">
+        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span class="chip-cell">${deptChips || '<span class="muted">등록된 사내시스템 없음</span>'}</span>
       </summary>
       <div class="org-children">${memberRows}</div>
     </details>`;
   }).join('');
 
   return adminShell('/policy/access', session, '정책 접근관리', `
+    <div class="tiles">
+      <div class="tile"><div class="tile-icon">${ICON.company}</div><div><div class="num">${totalMembers}</div><div class="label">대상 임직원</div></div></div>
+      <div class="tile"><div class="tile-icon">${ICON.folder}</div><div><div class="num">${deptCount}</div><div class="label">부서 수</div></div></div>
+      <div class="tile"><div class="tile-icon">${ICON.apps}</div><div><div class="num">${serviceNames.length}</div><div class="label">등록된 사내시스템</div></div></div>
+    </div>
+
+    <div class="org-search">
+      <div style="position:relative;max-width:340px">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
+        <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" oninput="filterOrgSearch(this.value)">
+      </div>
+    </div>
+
     <div style="margin-bottom:12px;color:var(--muted);font-size:13px">
       부서를 펼치면 소속 임직원별 개인 추가 권한(부서 정책 위에 더해짐)이 나옵니다. 부서 칩은 그 부서
       전체에 적용되고, 펼친 안의 칩은 그 사람 한 명에게만 적용됩니다.
     </div>
-    ${nodes}
+    ${nodes || '<div class="muted">등록된 부서가 없습니다.</div>'}
+
+    <script>
+      function filterOrgSearch(q) {
+        q = q.trim().toLowerCase();
+        document.querySelectorAll('.dept-node').forEach((node) => {
+          let anyMatch = !q;
+          node.querySelectorAll('.org-row-person').forEach((row) => {
+            const match = !q || (row.dataset.search || '').includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match && q) anyMatch = true;
+          });
+          node.style.display = anyMatch ? '' : 'none';
+          if (q && anyMatch) node.open = true;
+        });
+      }
+    </script>
   `);
 }
 
@@ -467,7 +502,7 @@ function renderSessions(session) {
   const sessions = auth.listActiveSessions();
   const sessRows = sessions.map((s) => `
     <tr>
-      <td>${s.name} (${s.email})</td><td>${s.ip}</td><td>${fmtTime(s.loginAt)}</td><td>${fmtTime(s.lastSeenAt)}</td>
+      <td>${avatar(s.name, 22)} ${s.name} <span class="muted">(${s.email})</span></td><td>${s.ip}</td><td>${fmtTime(s.loginAt)}</td><td>${fmtTime(s.lastSeenAt)}</td>
       <td><form class="inline" method="POST" action="/_ob/api/admin/sessions/terminate">
         <input type="hidden" name="sessionId" value="${s.id}">
         <button class="btn danger" type="submit">세션 종료</button>
@@ -476,28 +511,32 @@ function renderSessions(session) {
 
   const users = auth.listUsers();
   const byDept = groupByDept(users, { includeAdmins: true });
+  const totalCount = Object.keys(users).length;
+  const blockedCount = Object.values(users).filter((u) => u.blocked).length;
+  const lockedCount = Object.values(users).filter((u) => u.lockedUntil && Date.now() < u.lockedUntil).length;
 
   const acctNodes = Array.from(byDept.entries()).map(([dept, members]) => {
     const memberRows = members.map(([email, u]) => {
       const locked = u.lockedUntil && Date.now() < u.lockedUntil;
-      return `<div class="member-row">
-        <span>${u.name} <span class="muted">(${email})</span>${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
-        <span>
+      const searchKey = `${u.name} ${email}`.toLowerCase();
+      return `<div class="org-row org-row-wide org-row-person" data-search="${searchKey}">
+        <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''} <span class="muted">(${email})</span></span>
+        <span class="chip-cell" style="justify-content:flex-end;align-items:center">
           ${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}
           ${locked ? `<span class="tag-warn">잠김 (~${fmtTime(u.lockedUntil)})</span>` : ''}
           <form class="inline" method="POST" action="/_ob/api/admin/users/${u.blocked ? 'unblock' : 'block'}">
             <input type="hidden" name="email" value="${email}">
-            <button class="btn ${u.blocked ? 'ghost' : 'danger'}" type="submit" style="padding:4px 10px;font-size:11px">${u.blocked ? '차단 해제' : '계정 차단'}</button>
+            <button class="btn ${u.blocked ? 'ghost' : 'danger'} btn-sm" type="submit">${u.blocked ? '차단 해제' : '계정 차단'}</button>
           </form>
-          ${locked ? `<form class="inline" method="POST" action="/_ob/api/admin/users/unlock"><input type="hidden" name="email" value="${email}"><button class="btn ghost" type="submit" style="padding:4px 10px;font-size:11px">잠금 해제</button></form>` : ''}
+          ${locked ? `<form class="inline" method="POST" action="/_ob/api/admin/users/unlock"><input type="hidden" name="email" value="${email}"><button class="btn ghost btn-sm" type="submit">잠금 해제</button></form>` : ''}
         </span>
       </div>`;
     }).join('');
 
-    return `<details class="org-node">
-      <summary>
-        <span><span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
-        <span>
+    return `<details class="org-node dept-node">
+      <summary class="org-row org-row-wide org-row-dept">
+        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span class="chip-cell" style="justify-content:flex-end">
           ${chipForm('/org/dept-block', { dept, action: 'block' }, '부서 전체 차단', false)}
           ${chipForm('/org/dept-block', { dept, action: 'unblock' }, '부서 전체 해제', false)}
         </span>
@@ -507,12 +546,41 @@ function renderSessions(session) {
   }).join('');
 
   return adminShell('/policy/sessions', session, '활성세션·계정통제', `
+    <div class="tiles">
+      <div class="tile"><div class="tile-icon">${ICON.sessions}</div><div><div class="num">${sessions.length}</div><div class="label">활성 세션</div></div></div>
+      <div class="tile"><div class="tile-icon">${ICON.lock}</div><div><div class="num">${blockedCount}</div><div class="label">차단된 계정</div></div></div>
+      <div class="tile"><div class="tile-icon">${ICON.rules}</div><div><div class="num">${lockedCount}</div><div class="label">잠긴 계정</div></div></div>
+    </div>
+
     <div class="card">
       <div style="margin-bottom:10px;font-weight:600">활성 세션</div>
       <table><thead><tr><th>사용자</th><th>IP</th><th>로그인</th><th>최근활동</th><th></th></tr></thead><tbody>${sessRows || '<tr><td colspan="5">활성 세션 없음</td></tr>'}</tbody></table>
     </div>
+
     <div style="margin:18px 0 10px;font-weight:600">계정 통제 (부서별)</div>
-    ${acctNodes}
+    <div class="org-search">
+      <div style="position:relative;max-width:340px">
+        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
+        <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" oninput="filterOrgSearch(this.value)">
+      </div>
+    </div>
+    ${acctNodes || '<div class="muted">등록된 부서가 없습니다.</div>'}
+
+    <script>
+      function filterOrgSearch(q) {
+        q = q.trim().toLowerCase();
+        document.querySelectorAll('.dept-node').forEach((node) => {
+          let anyMatch = !q;
+          node.querySelectorAll('.org-row-person').forEach((row) => {
+            const match = !q || (row.dataset.search || '').includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match && q) anyMatch = true;
+          });
+          node.style.display = anyMatch ? '' : 'none';
+          if (q && anyMatch) node.open = true;
+        });
+      }
+    </script>
   `);
 }
 

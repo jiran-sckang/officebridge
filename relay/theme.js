@@ -108,6 +108,13 @@ const CSS = `
     color: #fff; font-weight: 700; flex-shrink: 0; vertical-align: middle;
   }
 
+  /* wider variant for policy/account pages: name+email on the left, a
+     flexible chip/action area on the right instead of the fixed 4-col grid
+     (which is too narrow once a row needs to fit N service chips). */
+  .org-row-wide { grid-template-columns: 280px 1fr; }
+  .org-row-wide .org-row-actions,
+  .chip-cell { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; opacity: 1; }
+
   .org-search { padding: 2px 0 14px; }
   .org-search input {
     width: 100%; padding: 9px 12px 9px 34px; border: 1px solid var(--border); border-radius: 7px;
