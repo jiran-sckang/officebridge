@@ -386,28 +386,6 @@ function downloadCard({ title, desc, fileName, steps }) {
 }
 
 function renderDownloads(session) {
-  const macCard = downloadCard({
-    title: 'macOS 메뉴바 앱',
-    desc: '메뉴바에서 연결 상태를 보고, 등록된 사내 시스템을 클릭 한 번으로 여는 앱입니다. Apple Silicon(M1 이상) 전용.',
-    fileName: 'officebridge-connector-mac.zip',
-    steps: [
-      '다운로드한 zip 압축을 풀고 "OfficeBridge Connector.app"을 Applications 폴더로 이동',
-      '처음 실행 시 "확인되지 않은 개발자" 경고가 뜨면 앱을 우클릭 → 열기',
-      '메뉴바 아이콘 클릭 → 연결 상태와 등록된 시스템 목록 확인',
-    ],
-  });
-
-  const kitCard = downloadCard({
-    title: '커넥터 킷 (범용, Node.js)',
-    desc: '어떤 OS에서든 실행 가능한 커맨드라인 커넥터입니다. 직접 서버에 상시 구동하거나 개발용으로 적합합니다.',
-    fileName: 'connector-kit.zip',
-    steps: [
-      '압축을 풀고 그 안의 README.md를 따라 진행 (Node.js 설치 → npm install → node index.js)',
-      '릴레이 주소·토큰은 config.js에 이미 이 릴레이용으로 채워져 있음',
-      '실행하면 로컬 관리 웹(:8090)도 함께 뜸 — 사내 시스템 주소는 거기서 등록',
-    ],
-  });
-
   const bridgeCard = downloadCard({
     title: '임직원용 브릿지 앱',
     desc: `일반 임직원이 자기 컴퓨터에 설치하는 앱입니다. 누구나 같은 파일을 받아 쓸 수 있고, 개인 설정파일은 필요 없습니다 — 최초 실행 시 본인이 회사코드(${TENANT_NAME})·이메일·비밀번호로 직접 인증합니다.`,
@@ -422,11 +400,9 @@ function renderDownloads(session) {
 
   return adminShell('/downloads', session, '설치 파일', `
     <div style="margin-bottom:16px;color:var(--muted);font-size:13px">
-      아래 셋 다 이 릴레이(${DOMAIN})에 연결되도록 미리 설정되어 있습니다. 위 둘은 사내망 안의 장비를 관리하는
-      IT 담당자용, 마지막 하나는 일반 임직원 개인용입니다.
+      임직원에게 배포할 앱입니다. 이 릴레이(${DOMAIN})에 연결되도록 미리 설정되어 있습니다.
+      (사내망 커넥터 배포는 별도로 진행합니다 — 이 페이지에서 제공하지 않습니다.)
     </div>
-    ${macCard}
-    ${kitCard}
     ${bridgeCard}
   `);
 }

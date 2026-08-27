@@ -17,9 +17,10 @@ const { DOMAIN, PORT, COOKIE_NAME, TENANT_NAME } = require('./config');
 
 const CERT_DIR = path.join(__dirname, '..', 'certs');
 const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
+// Only the employee-facing bridge app is offered here. Connector deployment
+// (connector-kit, the operator menu bar app) is handled out-of-band by the
+// vendor, not self-served through this page.
 const DOWNLOADABLE_FILES = {
-  'connector-kit.zip': 'application/zip',
-  'officebridge-connector-mac.zip': 'application/zip',
   'officebridge-bridge-mac.zip': 'application/zip',
 };
 
