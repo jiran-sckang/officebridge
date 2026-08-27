@@ -1,57 +1,13 @@
 {
-  "kim.sales@demo.co.kr": {
-    "name": "김영업",
-    "dept": "영업팀",
-    "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
-    "role": "user",
-    "blocked": false,
-    "failedAttempts": 0,
-    "lockedUntil": null,
-    "lastFailureAt": 1787800781918
-  },
-  "lee.dev@demo.co.kr": {
-    "name": "이개발",
-    "dept": "개발팀",
-    "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
-    "role": "user",
-    "blocked": false,
-    "failedAttempts": 0,
-    "lockedUntil": null
-  },
-  "park.hr@demo.co.kr": {
-    "name": "박인사",
-    "dept": "인사팀",
-    "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
-    "role": "user",
-    "blocked": false,
-    "failedAttempts": 0,
-    "lockedUntil": null
-  },
-  "admin@demo.co.kr": {
-    "name": "박 과장",
-    "dept": "보안팀",
-    "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
+  "sckang@amd.co.kr": {
+    "name": "sckang",
+    "dept": "관리팀",
     "role": "admin",
+    "passwordHash": "04e8d9e170927a35a1da26655d9a78eb6584ee0730f51227dfed65b548a938e0",
+    "failedAttempts": 0,
+    "lockedUntil": null,
     "blocked": false,
-    "failedAttempts": 0,
-    "lockedUntil": null
-  },
-  "choi.mkt@demo.co.kr": {
-    "name": "최마케팅",
-    "dept": "마케팅팀",
-    "role": "user",
-    "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
-    "failedAttempts": 0,
-    "lockedUntil": null,
-    "blocked": false
-  },
-  "jung.fin@demo.co.kr": {
-    "name": "정재무",
-    "dept": "재무팀",
-    "role": "user",
-    "passwordHash": "0ead2060b65992dca4769af601a1b3a35ef38cfad2c2c465bb160ea764157c5d",
-    "failedAttempts": 0,
-    "lockedUntil": null,
-    "blocked": false
+    "mfaPendingSecret": null,
+    "mfaSecret": null
   }
 }
