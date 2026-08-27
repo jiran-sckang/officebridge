@@ -1,0 +1,17 @@
+{
+  "name": "officebridge-agent-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OfficeBridge Agent Bridge — personal desktop client (F-11). Imports a per-employee bridge config and opens allowed internal systems with one click, no separate login.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^32.0.0",
+    "menubar": "^9.5.1"
+  },
+  "devDependencies": {
+    "electron-packager": "^17.1.2"
+  }
+}
