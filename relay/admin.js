@@ -129,10 +129,8 @@ function renderOrgChart(session) {
     .map(([email, u]) => {
       const token = auth.getBridgeTokenFor(email);
       const bridgeCell = token
-        ? `<a href="/_ob/downloads/bridge-config?email=${encodeURIComponent(email)}" class="btn ghost" style="text-decoration:none;display:inline-block">설정파일</a>
-           ${chipForm('/org/bridge-issue', { email }, '재발급', false)}
-           ${chipForm('/org/bridge-revoke', { email }, '회수', false)}`
-        : chipForm('/org/bridge-issue', { email }, '개인 브릿지 발급', false);
+        ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
+        : '<span class="muted">미설치</span>';
       return `<tr>
         <td>${u.name}</td>
         <td>${email}</td>
@@ -166,8 +164,9 @@ function renderOrgChart(session) {
       </form>
     </div>
     <div style="color:var(--muted);font-size:12px">
-      "개인 브릿지 발급"을 누르면 그 임직원 전용 설정파일을 만들 수 있습니다 — 이 파일을 브릿지 앱에 불러오면
-      비밀번호 입력 없이 본인이 접근 가능한 시스템만 바로 뜹니다. 부서/개인 접근 권한은 [정책 접근관리]에서 설정하세요.
+      임직원이 [설치 파일] 페이지에서 브릿지 앱을 받아 본인 계정(회사코드·이메일·비밀번호)으로 최초 1회 인증하면
+      "설치됨"으로 바뀝니다 — 별도로 설정파일을 만들어 전달할 필요는 없습니다. 퇴사·기기 분실 시엔 "접근 회수"로
+      그 앱을 즉시 무효화하세요. 부서/개인 접근 권한은 [정책 접근관리]에서 설정하세요.
     </div>
   `);
 }
@@ -411,13 +410,13 @@ function renderDownloads(session) {
 
   const bridgeCard = downloadCard({
     title: '임직원용 브릿지 앱',
-    desc: '일반 임직원이 자기 컴퓨터에 설치하는 앱입니다. [조직도] 페이지에서 그 사람 전용 설정파일을 따로 받아 같이 전달해야 합니다 — 앱만으로는 동작하지 않습니다.',
+    desc: `일반 임직원이 자기 컴퓨터에 설치하는 앱입니다. 누구나 같은 파일을 받아 쓸 수 있고, 개인 설정파일은 필요 없습니다 — 최초 실행 시 본인이 회사코드(${TENANT_NAME})·이메일·비밀번호로 직접 인증합니다.`,
     fileName: 'officebridge-bridge-mac.zip',
     steps: [
-      '이 zip(앱 본체)과, [조직도]에서 받은 그 임직원 전용 설정파일(.json)을 같이 전달',
       '앱을 Applications 폴더로 이동 후 실행 (우클릭 → 열기)',
-      '처음 실행 시 뜨는 파일 선택창에서 전달받은 설정파일(.json)을 선택',
-      '이후로는 로그인 없이 메뉴바에서 본인이 접근 가능한 시스템만 바로 클릭해서 접속',
+      `최초 실행 시 뜨는 화면에서 회사코드 "${TENANT_NAME}"와 본인의 포털 계정(이메일/비밀번호)으로 인증`,
+      '한 번 인증하면 그 뒤로는 로그인 없이 메뉴바에서 본인이 접근 가능한 시스템만 바로 클릭해서 접속',
+      '퇴사·기기 분실 시 [조직도]에서 "접근 회수"를 누르면 그 앱은 즉시 무효화됨',
     ],
   });
 
@@ -459,11 +458,6 @@ const actions = {
     }
     policy.ensureDept(dept);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 등록: ${name} (${email}, ${dept})` });
-  },
-  'org/bridge-issue'(body, session, ip) {
-    const { email } = body;
-    auth.issueBridgeToken(email);
-    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 토큰 발급: ${email}` });
   },
   'org/bridge-revoke'(body, session, ip) {
     const { email } = body;

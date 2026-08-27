@@ -64,24 +64,22 @@ function isLocked(user) {
   return user.lockedUntil && Date.now() < user.lockedUntil;
 }
 
-// Returns { ok, sessionId } on success, or { ok: false, reason } on failure.
-function login(email, password, ip) {
+// Shared by web login and bridge-app registration: checks blocked/locked
+// state and the password itself, and tracks lockout on failure. Does NOT
+// enforce bridgeOnlyAccess — that's a web-specific restriction, and the
+// bridge app registering itself is the sanctioned alternative to it, not
+// something it should be blocked by too.
+function verifyPassword(email, password) {
   const user = users[email];
   if (!user) return { ok: false, reason: '존재하지 않는 계정입니다.' };
   if (user.blocked) return { ok: false, reason: '차단된 계정입니다. 관리자에게 문의하세요.' };
-  // Admins always keep web access — otherwise turning this rule on could
-  // lock everyone, including the admin who'd need to turn it back off,
-  // out of the console at the same time.
-  if (rules.getConfig().bridgeOnlyAccess.enabled && user.role !== 'admin') {
-    return { ok: false, reason: '포털(웹) 로그인이 제한되어 있습니다. OfficeBridge 브릿지 앱으로 접속해주세요.' };
-  }
   if (isLocked(user)) {
     const mins = Math.ceil((user.lockedUntil - Date.now()) / 60000);
     return { ok: false, reason: `로그인 연속 실패로 계정이 잠겼습니다. 약 ${mins}분 후 다시 시도하세요.` };
   }
 
   if (user.passwordHash !== sha256(password)) {
-    const { maxFailures, windowMinutes, lockMinutes } = rules.getConfig().loginLockout;
+    const { maxFailures, lockMinutes } = rules.getConfig().loginLockout;
     user.failedAttempts = (user.failedAttempts || 0) + 1;
     user.lastFailureAt = Date.now();
     if (user.failedAttempts >= maxFailures) {
@@ -97,7 +95,20 @@ function login(email, password, ip) {
   user.failedAttempts = 0;
   user.lockedUntil = null;
   persistUsers();
+  return { ok: true, user };
+}
 
+// Returns { ok, sessionId } on success, or { ok: false, reason } on failure.
+function login(email, password, ip) {
+  // Admins always keep web access — otherwise turning bridgeOnlyAccess on
+  // could lock everyone, including the admin who'd need to turn it back
+  // off, out of the console at the same time.
+  const user = users[email];
+  if (user && rules.getConfig().bridgeOnlyAccess.enabled && user.role !== 'admin') {
+    return { ok: false, reason: '포털(웹) 로그인이 제한되어 있습니다. OfficeBridge 브릿지 앱으로 접속해주세요.' };
+  }
+  const result = verifyPassword(email, password);
+  if (!result.ok) return result;
   return { ok: true, sessionId: createSession(email, ip) };
 }
 
@@ -135,6 +146,15 @@ function revokeBridgeToken(email) {
 function getBridgeTokenFor(email) {
   const entry = Object.entries(bridgeTokens).find(([, info]) => info.email === email);
   return entry ? entry[0] : null;
+}
+
+// One-time app setup: the bridge app itself verifies the employee's normal
+// password (same one they'd use on the portal) and gets a personal token
+// back to keep — no admin has to manually generate and hand over a file.
+function registerBridge(email, password) {
+  const result = verifyPassword(email, password);
+  if (!result.ok) return result;
+  return { ok: true, bridgeToken: issueBridgeToken(email), user: result.user };
 }
 
 // Exchanges a bridge token for a real session, exactly as if the employee
@@ -212,4 +232,5 @@ module.exports = {
   revokeBridgeToken,
   getBridgeTokenFor,
   exchangeBridgeToken,
+  registerBridge,
 };

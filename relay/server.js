@@ -13,7 +13,7 @@ const portal = require('./portal');
 const admin = require('./admin');
 const connectorApi = require('./connectorApi');
 const { loginPage, blockPage } = require('./theme');
-const { DOMAIN, PORT, COOKIE_NAME } = require('./config');
+const { DOMAIN, PORT, COOKIE_NAME, TENANT_NAME } = require('./config');
 
 const CERT_DIR = path.join(__dirname, '..', 'certs');
 const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
@@ -193,6 +193,33 @@ async function handleInternal(req, res, ctx) {
     });
   }
 
+  // F-11 bridge app one-time setup: the app itself asks for company code +
+  // email + password and trades them directly for a personal bridge token —
+  // no admin has to generate and hand over a file. Public by design, same
+  // as the exchange endpoint above; the password itself is the credential.
+  if (pathname === '/_ob/api/bridge/register' && req.method === 'POST') {
+    let body;
+    try {
+      body = JSON.parse((await readBody(req)).toString('utf8') || '{}');
+    } catch {
+      res.writeHead(400);
+      return res.end('bad request');
+    }
+    if (body.companyCode !== TENANT_NAME) {
+      audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `브릿지 앱 등록 실패: 회사코드 불일치 (${body.companyCode})` });
+      res.writeHead(401);
+      return res.end('회사코드가 올바르지 않습니다.');
+    }
+    const result = auth.registerBridge(body.email, body.password);
+    if (!result.ok) {
+      audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `브릿지 앱 등록 실패: ${result.reason}` });
+      res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end(result.reason);
+    }
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '브릿지 앱 최초 등록' });
+    return sendJson(res, 200, { bridgeToken: result.bridgeToken, name: result.user.name, dept: result.user.dept });
+  }
+
   // Hands a session already created via the bridge exchange above to the
   // browser as a cookie, then redirects on — the bridge app never handles
   // the browser's cookie jar directly, it just opens this URL.
@@ -227,29 +254,6 @@ async function handleInternal(req, res, ctx) {
     }
     res.writeHead(404);
     return res.end('not found');
-  }
-
-  // Personal bridge app config — generated on the fly per employee, not a
-  // file on disk. Admin-only: only an admin should be handing these out.
-  if (pathname === '/_ob/downloads/bridge-config') {
-    const session = auth.getSession(sessionId);
-    if (!session || session.role !== 'admin') {
-      res.writeHead(403);
-      return res.end('forbidden');
-    }
-    const email = parsedUrl.searchParams.get('email');
-    const token = auth.getBridgeTokenFor(email);
-    if (!token) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end('이 임직원에게 발급된 브릿지 토큰이 없습니다.');
-    }
-    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `개인 브릿지 설정파일 다운로드: ${email}` });
-    const config = JSON.stringify({ relayDomain: DOMAIN, bridgeToken: token }, null, 2);
-    res.writeHead(200, {
-      'Content-Type': 'application/json',
-      'Content-Disposition': `attachment; filename="officebridge-bridge-config.json"`,
-    });
-    return res.end(config);
   }
 
   // Admin-only file downloads (connector install packages). Gated by

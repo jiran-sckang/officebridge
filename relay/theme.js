@@ -58,6 +58,7 @@ const CSS = `
   input[type=text], input[type=email], input[type=password] { padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; width: 100%; margin-bottom: 10px; }
   .row { display: flex; gap: 10px; }
   .row > div { flex: 1; }
+  .muted { color: var(--muted); font-size: 12px; }
   .badge-ok { color: var(--ok); font-weight: 600; }
   .badge-deny { color: var(--deny); font-weight: 600; }
   .badge-warn { color: var(--warn); font-weight: 600; }
