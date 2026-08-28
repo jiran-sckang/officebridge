@@ -212,6 +212,10 @@ ipcMain.handle('connector:logout', async () => {
   stopTunnel();
 });
 
+ipcMain.handle('connector:quit', async () => {
+  app.quit();
+});
+
 ipcMain.handle('connector:getStatus', async () => {
   if (!connectorToken) {
     const revoked = revokedMessage;

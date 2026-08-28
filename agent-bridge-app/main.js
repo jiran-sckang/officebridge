@@ -62,7 +62,11 @@ function postJson(hostname, urlPath, body) {
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
           const text = Buffer.concat(chunks).toString('utf8');
-          if (res.statusCode !== 200) return reject(new Error(text || `relay responded ${res.statusCode}`));
+          if (res.statusCode !== 200) {
+            const err = new Error(text || `relay responded ${res.statusCode}`);
+            err.statusCode = res.statusCode;
+            return reject(err);
+          }
           try {
             resolve(JSON.parse(text));
           } catch (err) {
@@ -77,10 +81,35 @@ function postJson(hostname, urlPath, body) {
   });
 }
 
+function forgetConfig() {
+  config = null;
+  try { fs.unlinkSync(CONFIG_PATH); } catch {}
+}
+
+// A 401 here means the admin revoked this employee's bridge token (org
+// chart's "접근 회수") — the token is gone for good, so there's no point
+// holding onto it locally. Clear it and drop straight back to the login
+// screen instead of just showing a vague connection error forever.
+async function freshExchange() {
+  try {
+    return await postJson(config.relayDomain, '/_ob/api/bridge/exchange', { token: config.bridgeToken });
+  } catch (err) {
+    if (err.statusCode === 401) forgetConfig();
+    throw err;
+  }
+}
+
 async function exchange() {
   if (!config) return { needsAuth: true };
-  const result = await postJson(config.relayDomain, '/_ob/api/bridge/exchange', { token: config.bridgeToken });
-  return { name: result.name, dept: result.dept, services: result.services };
+  try {
+    const result = await freshExchange();
+    return { name: result.name, dept: result.dept, services: result.services };
+  } catch (err) {
+    if (err.statusCode === 401) {
+      return { needsAuth: true, revokedMessage: '관리자가 접근 권한을 회수했습니다. 다시 로그인해주세요.' };
+    }
+    return { error: err.message };
+  }
 }
 
 ipcMain.handle('bridge:getStatus', async () => {
@@ -94,7 +123,7 @@ ipcMain.handle('bridge:getStatus', async () => {
 ipcMain.handle('bridge:openService', async (_event, serviceUrl) => {
   // Fresh exchange right before opening — the sessionId only needs to be
   // valid for this one handoff, so there's nothing to keep fresh locally.
-  const result = await postJson(config.relayDomain, '/_ob/api/bridge/exchange', { token: config.bridgeToken });
+  const result = await freshExchange();
   const enterUrl = `https://${config.relayDomain}/_ob/bridge-enter?sid=${encodeURIComponent(result.sessionId)}&next=${encodeURIComponent(serviceUrl)}`;
   await shell.openExternal(enterUrl);
 });
@@ -107,6 +136,9 @@ ipcMain.handle('bridge:register', async (_event, { companyCode, email, password 
 });
 
 ipcMain.handle('bridge:forget', async () => {
-  config = null;
-  try { fs.unlinkSync(CONFIG_PATH); } catch {}
+  forgetConfig();
+});
+
+ipcMain.handle('bridge:quit', async () => {
+  app.quit();
 });

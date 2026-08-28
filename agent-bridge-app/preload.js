@@ -5,4 +5,5 @@ contextBridge.exposeInMainWorld('bridge', {
   openService: (url) => ipcRenderer.invoke('bridge:openService', url),
   register: (companyCode, email, password) => ipcRenderer.invoke('bridge:register', { companyCode, email, password }),
   forget: () => ipcRenderer.invoke('bridge:forget'),
+  quit: () => ipcRenderer.invoke('bridge:quit'),
 });
