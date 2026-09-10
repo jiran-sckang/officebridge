@@ -40,6 +40,18 @@ function avatar(name, size) {
   return `<span class="avatar" style="width:${size}px;height:${size}px;background:${avatarColor(name || '?')};font-size:${Math.round(size * 0.42)}px">${initial}</span>`;
 }
 
+// A row of overlapping member avatars ("who's in this group"), used to fill
+// dept/company summary rows with real signal instead of empty placeholder
+// cells — capped so a 300-person department doesn't render 300 circles.
+function avatarStack(members, size = 24, max = 5) {
+  const shown = members.slice(0, max).map(([, u]) => avatar(u.name, size)).join('');
+  const overflow = members.length - max;
+  const more = overflow > 0
+    ? `<span class="avatar more" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px">+${overflow}</span>`
+    : '';
+  return `<span class="avatar-stack">${shown}${more}</span>`;
+}
+
 const NAV = [
   { path: '/dashboard', label: '대시보드', icon: ICON.dashboard },
   { group: '조직 관리' },
@@ -170,6 +182,7 @@ function renderOrgChart(session) {
   const deptNames = Object.keys(deptPolicy);
   const deptNodes = deptNames.map((dept) => {
     const members = byDept.get(dept) || [];
+    const installedInDept = members.filter(([email]) => auth.getBridgeTokenFor(email)).length;
     const memberRows = members.length
       ? members.map(([email, u]) => {
           const token = auth.getBridgeTokenFor(email);
@@ -201,8 +214,10 @@ function renderOrgChart(session) {
     return `<details class="org-node dept-node">
       <summary class="org-row org-row-dept">
         <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
-        <span class="muted">-</span>
-        <span class="muted">-</span>
+        <span class="member-preview">
+          ${members.length ? avatarStack(members) : '<span class="muted">-</span>'}
+          <span class="install-stat">설치 ${installedInDept}/${members.length}</span>
+        </span>
         <span class="org-row-actions">
           <button type="button" class="btn ghost btn-sm" onclick="event.preventDefault();openAddMember('${dept}')">${ICON.plus} 임직원 추가</button>
           ${members.length === 0
@@ -236,8 +251,10 @@ function renderOrgChart(session) {
     <div class="org-node root-node">
       <div class="org-row org-row-company">
         <span class="org-tree-cell">${ICON.company} <span class="dept-name">${TENANT_NAME}</span><span class="dept-count">${totalCount}명</span></span>
-        <span class="muted">-</span>
-        <span class="muted">-</span>
+        <span class="member-preview">
+          ${totalCount ? avatarStack(Object.entries(users)) : '<span class="muted">-</span>'}
+          <span class="install-stat">설치 ${installedCount}/${totalCount}</span>
+        </span>
         <span class="org-row-actions">
           <button type="button" class="btn ghost btn-sm" onclick="document.getElementById('addDeptDialog').showModal()">${ICON.plus} 부서 추가</button>
         </span>
@@ -529,7 +546,7 @@ function renderPolicyAccess(session) {
 
     return `<details class="org-node dept-node">
       <summary class="org-row org-row-wide org-row-dept">
-        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span>${members.length ? avatarStack(members, 20, 4) : ''}</span>
         <span class="chip-cell">${deptChips || '<span class="muted">등록된 사내시스템 없음</span>'}</span>
       </summary>
       <div class="org-children">${memberRows}</div>
@@ -646,7 +663,7 @@ function renderSessions(session) {
 
     return `<details class="org-node dept-node">
       <summary class="org-row org-row-wide org-row-dept">
-        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
+        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span>${members.length ? avatarStack(members, 20, 4) : ''}</span>
         <span class="chip-cell" style="justify-content:flex-end">
           ${chipForm('/org/dept-block', { dept, action: 'block' }, '부서 전체 차단', false)}
           ${chipForm('/org/dept-block', { dept, action: 'unblock' }, '부서 전체 해제', false)}
