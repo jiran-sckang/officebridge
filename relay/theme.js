@@ -75,66 +75,30 @@ const CSS = `
   .tag-ok { background: #e5f3ec; color: var(--ok); }
   .tag-deny { background: #fdeaea; color: var(--deny); }
   .tag-warn { background: #fdf3e0; color: var(--warn); }
-  .org-node { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; background: var(--card); box-shadow: 0 1px 2px rgba(16,24,40,.04); }
-  .org-node > summary { list-style: none; cursor: pointer; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .org-node > summary::-webkit-details-marker { display: none; }
-  .org-node > summary::before { content: '▸'; margin-right: 8px; color: var(--muted); display: inline-block; transition: transform .12s; }
-  .org-node[open] > summary::before { transform: rotate(90deg); }
-  .org-node .dept-name { font-weight: 700; }
-  .org-node .dept-count { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
-  .org-children { border-top: 1px solid var(--border); padding: 4px 16px 10px 34px; }
-  .member-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 13px; flex-wrap: wrap; gap: 8px; }
-  .member-row + .member-row { border-top: 1px dotted var(--border); }
-
-  /* org chart: table-like tree — company > department > person, each row a
-     grid so the 이름/이메일/상태/작업 columns line up across all levels. */
-  .root-node { border: 1px solid var(--blue); }
-  .root-node > .org-row { background: var(--blue-tint); border-radius: 9px 9px 0 0; }
+  /* Kept for the flat per-user lists that still use this row shape (e.g.
+     2차 인증 관리 대상 목록) — the dept-tree markup that used to wrap these
+     (.org-node/.org-children/.root-node/...) was replaced by .table-panel /
+     .data-table across 조직도·정책접근관리·계정통제. */
   .org-row {
     display: grid; grid-template-columns: 1fr 220px 90px 220px; align-items: center;
     gap: 10px; padding: 10px 16px; font-size: 13px;
   }
-  .org-row-dept { cursor: pointer; }
-  /* dept/company rows don't have an email or status to show — give them a
-     compact "who's inside" preview column instead of dead placeholder cells */
-  .org-row-dept, .org-row-company { grid-template-columns: 1fr auto 220px; }
-  .org-node > summary.org-row::-webkit-details-marker { display: none; }
-  .org-node > summary.org-row::before { content: '▸'; margin-right: 6px; color: var(--muted); display: inline-block; transition: transform .12s; }
-  .org-node[open] > summary.org-row::before { transform: rotate(90deg); }
   .org-tree-cell { display: flex; align-items: center; gap: 8px; }
   .org-tree-cell svg { flex-shrink: 0; color: var(--blue); }
-  .org-row-person .org-tree-cell { padding-left: 30px; }
-  .org-row-person .org-tree-cell svg { color: var(--muted); }
-  .org-children { border-top: 1px solid var(--border); padding: 0; }
-  .org-children .org-row-person { border-top: 1px dotted var(--border); }
-  .org-children .org-row-person:first-child { border-top: none; }
-  .org-row-person:hover, .org-row-dept:hover, .org-row-company:hover { background: var(--bg); }
-  .root-node > .org-row-company:hover { background: var(--blue-tint); filter: brightness(0.98); }
-
-  .member-preview { display: flex; align-items: center; gap: 10px; }
-  .avatar-stack { display: flex; align-items: center; }
-  .avatar-stack .avatar { margin-left: -9px; border: 2px solid var(--card); }
-  .avatar-stack .avatar:first-child { margin-left: 0; }
-  .avatar-stack .more { background: var(--border); color: var(--muted); font-size: 10px; }
-  .install-stat { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .org-row-person:hover { background: var(--bg); }
+  .dept-count { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
   .btn-sm { display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; font-size: 12px; }
   .btn-sm svg { width: 13px; height: 13px; }
-  /* Always visible, not hover-reveal — these are primary CRUD actions
-     (add dept, add/move/delete member) and hiding them behind hover made
-     them hard to discover. */
-  .org-row-actions { display: flex; justify-content: flex-end; align-items: center; gap: 6px; flex-wrap: wrap; }
 
   .avatar {
     display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;
     color: #fff; font-weight: 700; flex-shrink: 0; vertical-align: middle;
   }
 
-  /* wider variant for policy/account pages: name+email on the left, a
-     flexible chip/action area on the right instead of the fixed 4-col grid
-     (which is too narrow once a row needs to fit N service chips). */
+  /* wider variant: name+email on the left, a flexible chip/action area on
+     the right instead of the fixed 4-col grid (too narrow for N chips). */
   .org-row-wide { grid-template-columns: 280px 1fr; }
-  .org-row-wide .org-row-actions,
-  .chip-cell { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; opacity: 1; }
+  .chip-cell { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
 
   .platform-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin: 14px 0 20px; }
   .platform-tile {
@@ -146,13 +110,6 @@ const CSS = `
   .platform-tile.disabled { opacity: .5; cursor: not-allowed; }
   .platform-label { font-size: 16px; font-weight: 700; }
   .platform-size { font-size: 12px; opacity: .85; }
-
-  .org-search { padding: 2px 0 14px; }
-  .org-search input {
-    width: 100%; padding: 9px 12px 9px 34px; border: 1px solid var(--border); border-radius: 7px;
-    font-size: 13px; background: #fff;
-  }
-  .org-search input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-tint); }
 
   dialog.modal-box { border: none; border-radius: 10px; padding: 0; width: 340px; box-shadow: 0 20px 50px rgba(16,24,40,.25); }
   dialog.modal-box::backdrop { background: rgba(15,23,42,.45); }
@@ -178,6 +135,52 @@ const CSS = `
   .block-box h1 { margin: 12px 0 8px; }
   .block-box p { color: var(--muted); font-size: 14px; }
   .log-line { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; padding: 3px 0; border-bottom: 1px dotted var(--border); }
+
+  /* ---- flat table panel (조직도/정책접근관리/계정통제 공통 틀) ------------- */
+  .table-panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+  .table-banner { background: var(--blue); color: #fff; padding: 14px 20px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .table-banner .t-title { font-weight: 700; font-size: 15px; }
+  .table-banner .t-desc { font-size: 12.5px; opacity: .88; }
+  .table-filter-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
+  .table-filter-row .seg { display: flex; align-items: center; gap: 18px; }
+  .table-filter-row label.radio { display: flex; align-items: center; gap: 7px; font-size: 13.5px; cursor: pointer; }
+  .table-filter-row input[type=radio] { accent-color: var(--blue); width: 16px; height: 16px; margin: 0; }
+  .table-filter-row .dept-select { padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; background: #fff; }
+  .table-search { display: flex; gap: 8px; }
+  .table-search input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; width: 220px; }
+  .table-search button { background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 8px 16px; font-size: 13px; cursor: pointer; color: var(--text); }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .data-table thead th { background: var(--blue-tint); color: var(--text); font-weight: 700; font-size: 12.5px; text-transform: none; padding: 11px 16px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .data-table th.sortable { cursor: pointer; user-select: none; }
+  .data-table th.sortable .sort-arrow { color: var(--muted); font-size: 10px; margin-left: 3px; }
+  .data-table tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .data-table tbody tr:hover { background: var(--bg); }
+  .data-table .cell-muted { color: var(--muted); }
+  .data-table .cell-name { display: flex; align-items: center; gap: 10px; }
+  .table-empty-row td { text-align: center; color: var(--muted); padding: 32px 16px; }
+
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none; background: none; padding: 0; font: inherit; }
+  .switch .track { width: 40px; height: 22px; border-radius: 11px; background: var(--border); position: relative; transition: background .15s; flex-shrink: 0; }
+  .switch .track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.25); transition: transform .15s; }
+  .switch.on .track { background: var(--warn); }
+  .switch.on .track::after { transform: translateX(18px); }
+  .switch .switch-label { font-size: 11.5px; font-weight: 700; color: var(--muted); min-width: 26px; }
+  .switch.on .switch-label { color: var(--warn); }
+
+  .table-pagination { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; flex-wrap: wrap; gap: 12px; }
+  .table-pagination .page-size { padding: 7px 10px; border: 1px solid var(--border); border-radius: 10px; font-size: 12.5px; background: #fff; }
+  .table-pagination .page-nav { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .table-pagination .page-nav button { border: 1px solid var(--border); background: #fff; border-radius: 8px; width: 28px; height: 28px; cursor: pointer; color: var(--text); }
+  .table-pagination .page-nav button:disabled { opacity: .4; cursor: default; }
+  .table-pagination .page-count { font-size: 12.5px; color: var(--muted); }
+  .table-toolbar-btn { background: var(--blue-tint); color: var(--blue); border: 1px solid #bcd3ef; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; }
+
+  .dept-chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .dept-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 5px 8px 5px 6px; font-size: 12.5px; }
+  .dept-chip-count { color: var(--muted); font-size: 11px; }
+  .dept-chip-x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+  .dept-chip-x:hover { color: var(--deny); }
 `;
 
 function escapeHtml(value) {

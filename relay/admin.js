@@ -40,18 +40,6 @@ function avatar(name, size) {
   return `<span class="avatar" style="width:${size}px;height:${size}px;background:${avatarColor(name || '?')};font-size:${Math.round(size * 0.42)}px">${initial}</span>`;
 }
 
-// A row of overlapping member avatars ("who's in this group"), used to fill
-// dept/company summary rows with real signal instead of empty placeholder
-// cells — capped so a 300-person department doesn't render 300 circles.
-function avatarStack(members, size = 24, max = 5) {
-  const shown = members.slice(0, max).map(([, u]) => avatar(u.name, size)).join('');
-  const overflow = members.length - max;
-  const more = overflow > 0
-    ? `<span class="avatar more" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.38)}px">+${overflow}</span>`
-    : '';
-  return `<span class="avatar-stack">${shown}${more}</span>`;
-}
-
 const NAV = [
   { path: '/dashboard', label: '대시보드', icon: ICON.dashboard },
   { group: '조직 관리' },
@@ -174,65 +162,50 @@ function logLineHtml(e) {
 function renderOrgChart(session) {
   const users = auth.listUsers();
   const deptPolicy = policy.getDeptPolicy();
-  const byDept = groupByDept(users, { includeAdmins: true });
+  const deptNames = Object.keys(deptPolicy);
   const totalCount = Object.keys(users).length;
-  const deptCount = Object.keys(deptPolicy).length;
+  const deptCount = deptNames.length;
   const installedCount = Object.keys(users).filter((email) => auth.getBridgeTokenFor(email)).length;
 
-  const deptNames = Object.keys(deptPolicy);
-  const deptNodes = deptNames.map((dept) => {
-    const members = byDept.get(dept) || [];
-    const installedInDept = members.filter(([email]) => auth.getBridgeTokenFor(email)).length;
-    const memberRows = members.length
-      ? members.map(([email, u]) => {
-          const token = auth.getBridgeTokenFor(email);
-          const bridgeCell = token
-            ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
-            : '<span class="muted">미설치</span>';
-          const searchKey = `${u.name} ${email}`.toLowerCase();
-          return `<div class="org-row org-row-person" data-search="${searchKey}">
-            <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span>
-            <span class="muted">${email}</span>
-            <span>${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}</span>
-            <span class="org-row-actions">
-              ${bridgeCell}
-              <details class="row-menu">
-                <summary>${ICON.gear}</summary>
-                <div class="menu">
-                  <button type="button" onclick="event.preventDefault();openEditMember(this,'${email}','${u.name}','${dept}')">사용자 수정</button>
-                  <form method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
-                    <input type="hidden" name="email" value="${email}">
-                    <button type="submit" class="danger-text">사용자 삭제</button>
-                  </form>
-                </div>
-              </details>
-            </span>
-          </div>`;
-        }).join('')
-      : '<div class="org-row org-row-person"><span class="org-tree-cell muted">소속 임직원 없음</span></div>';
-
-    return `<details class="org-node dept-node">
-      <summary class="org-row org-row-dept">
-        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span></span>
-        <span class="member-preview">
-          ${members.length ? avatarStack(members) : '<span class="muted">-</span>'}
-          <span class="install-stat">설치 ${installedInDept}/${members.length}</span>
-        </span>
-        <span class="org-row-actions">
-          <button type="button" class="btn ghost btn-sm" onclick="event.preventDefault();openAddMember('${dept}')">${ICON.plus} 임직원 추가</button>
-          ${members.length === 0
-            ? `<form class="inline" method="POST" action="/_ob/api/admin/org/dept-delete" onsubmit="return confirm('${dept} 부서를 삭제할까요?')">
-                <input type="hidden" name="dept" value="${dept}">
-                <button type="submit" class="btn ghost btn-sm">부서 삭제</button>
-              </form>`
-            : ''}
-        </span>
-      </summary>
-      <div class="org-children">
-        ${memberRows}
-      </div>
-    </details>`;
+  const deptChips = deptNames.map((dept) => {
+    const count = Object.values(users).filter((u) => u.dept === dept).length;
+    const deleteBtn = count === 0
+      ? `<form class="inline" method="POST" action="/_ob/api/admin/org/dept-delete" onsubmit="return confirm('${dept} 부서를 삭제할까요?')">
+          <input type="hidden" name="dept" value="${dept}">
+          <button type="submit" class="dept-chip-x" title="부서 삭제">×</button>
+        </form>`
+      : '';
+    return `<span class="dept-chip">${avatar(dept, 20)} ${dept} <span class="dept-chip-count">${count}명</span>${deleteBtn}</span>`;
   }).join('');
+
+  const rows = Object.entries(users).map(([email, u]) => {
+    const token = auth.getBridgeTokenFor(email);
+    const bridgeCell = token
+      ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
+      : '<span class="muted">미설치</span>';
+    const searchKey = `${u.name} ${email}`.toLowerCase();
+    return `<tr data-row data-search="${searchKey}" data-dept="${u.dept}">
+      <td><span class="cell-name">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
+      <td class="cell-muted">${email}</td>
+      <td>${u.dept}</td>
+      <td>${bridgeCell}</td>
+      <td>
+        <details class="row-menu">
+          <summary>${ICON.gear}</summary>
+          <div class="menu">
+            <button type="button" onclick="event.preventDefault();openEditMember(this,'${email}','${u.name}','${u.dept}')">사용자 수정</button>
+            <form method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
+              <input type="hidden" name="email" value="${email}">
+              <button type="submit" class="danger-text">사용자 삭제</button>
+            </form>
+          </div>
+        </details>
+      </td>
+    </tr>`;
+  }).join('');
+
+  const deptOptions = `<option value="">전체 부서</option>` + deptNames.map((d) => `<option value="${d}">${d}</option>`).join('');
+  const deptOptionsPlain = deptNames.map((d) => `<option value="${d}">${d}</option>`).join('');
 
   return adminShell('/org', session, '조직도', `
     <div class="tiles">
@@ -241,26 +214,58 @@ function renderOrgChart(session) {
       <div class="tile"><div class="tile-icon">${ICON.access}</div><div><div class="num">${installedCount} / ${totalCount}</div><div class="label">브릿지 설치</div></div></div>
     </div>
 
-    <div class="org-search">
-      <div style="position:relative;max-width:340px">
-        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
-        <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" oninput="filterOrgSearch(this.value)">
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">부서</div>
+      <div class="dept-chip-row">
+        ${deptChips}
+        <button type="button" class="btn ghost btn-sm" onclick="document.getElementById('addDeptDialog').showModal()">${ICON.plus} 부서 추가</button>
       </div>
     </div>
 
-    <div class="org-node root-node">
-      <div class="org-row org-row-company">
-        <span class="org-tree-cell">${ICON.company} <span class="dept-name">${TENANT_NAME}</span><span class="dept-count">${totalCount}명</span></span>
-        <span class="member-preview">
-          ${totalCount ? avatarStack(Object.entries(users)) : '<span class="muted">-</span>'}
-          <span class="install-stat">설치 ${installedCount}/${totalCount}</span>
-        </span>
-        <span class="org-row-actions">
-          <button type="button" class="btn ghost btn-sm" onclick="document.getElementById('addDeptDialog').showModal()">${ICON.plus} 부서 추가</button>
-        </span>
+    <div class="table-panel">
+      <div class="table-banner">
+        <span class="t-title">임직원</span>
+        <span class="t-desc">전체 ${totalCount}명 · 브릿지 설치 ${installedCount}/${totalCount}</span>
       </div>
-      <div class="org-children" style="padding-left:0">
-        ${deptNodes}
+      <div class="table-filter-row">
+        <select class="dept-select" id="orgDeptFilter">${deptOptions}</select>
+        <div class="table-search">
+          <span style="position:relative">
+            <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" style="padding-left:34px">
+            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
+          </span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" id="orgTable">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>이메일</th>
+              <th class="sortable" id="orgSortDept">부서 <span class="sort-arrow">▾</span></th>
+              <th>브릿지</th>
+              <th>설정</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+            <tr class="table-empty-row" id="orgEmptyRow" style="display:none"><td colspan="5">등록된 임직원이 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-pagination">
+        <select class="page-size" id="orgPageSize">
+          <option value="10">10개씩 보기</option>
+          <option value="25">25개씩 보기</option>
+          <option value="50">50개씩 보기</option>
+        </select>
+        <div class="page-nav">
+          <button type="button" id="orgPrev">‹</button>
+          <span class="page-count" id="orgPageInfo">1 / 1 페이지</span>
+          <button type="button" id="orgNext">›</button>
+          <span class="page-count" id="orgCount"></span>
+        </div>
+        <button type="button" class="table-toolbar-btn" onclick="openAddMember()">${ICON.plus} 임직원 추가</button>
       </div>
     </div>
 
@@ -284,12 +289,13 @@ function renderOrgChart(session) {
 
     <dialog id="addMemberDialog" class="modal-box">
       <form method="POST" action="/_ob/api/admin/org/create">
-        <h3>임직원 추가 <span id="addMemberDeptLabel" class="muted"></span></h3>
-        <input type="hidden" name="dept" id="addMemberDeptField">
+        <h3>임직원 추가</h3>
         <label>이름</label>
         <input type="text" name="name" required>
         <label>이메일</label>
         <input type="email" name="email" required>
+        <label>부서</label>
+        <select name="dept" required>${deptOptionsPlain}</select>
         <label>초기 비밀번호</label>
         <input type="password" name="password" required>
         <div class="modal-actions">
@@ -308,7 +314,7 @@ function renderOrgChart(session) {
         <label>이메일</label>
         <input type="email" name="newEmail" id="editMemberNewEmailField" required>
         <label>부서</label>
-        <select name="dept" id="editMemberDeptField">${deptNames.map((d) => `<option value="${d}">${d}</option>`).join('')}</select>
+        <select name="dept" id="editMemberDeptField">${deptOptionsPlain}</select>
         <div class="modal-actions">
           <button type="button" class="btn ghost" onclick="document.getElementById('editMemberDialog').close()">취소</button>
           <button class="btn" type="submit">저장</button>
@@ -316,10 +322,8 @@ function renderOrgChart(session) {
       </form>
     </dialog>
 
-    <script>
-      function openAddMember(dept) {
-        document.getElementById('addMemberDeptField').value = dept;
-        document.getElementById('addMemberDeptLabel').textContent = '· ' + dept;
+    <script>${TABLE_JS}
+      function openAddMember() {
         document.getElementById('addMemberDialog').showModal();
       }
       function openEditMember(trigger, email, name, dept) {
@@ -331,19 +335,12 @@ function renderOrgChart(session) {
         document.getElementById('editMemberDeptField').value = dept;
         document.getElementById('editMemberDialog').showModal();
       }
-      function filterOrgSearch(q) {
-        q = q.trim().toLowerCase();
-        document.querySelectorAll('.dept-node').forEach((node) => {
-          let anyMatch = !q;
-          node.querySelectorAll('.org-row-person').forEach((row) => {
-            const match = !q || (row.dataset.search || '').includes(q);
-            row.style.display = match ? '' : 'none';
-            if (match && q) anyMatch = true;
-          });
-          node.style.display = anyMatch ? '' : 'none';
-          if (q && anyMatch) node.open = true;
-        });
-      }
+      initTable({
+        tableId: 'orgTable', searchId: 'orgSearchInput', deptSelectId: 'orgDeptFilter',
+        pageSizeId: 'orgPageSize', prevId: 'orgPrev', nextId: 'orgNext',
+        pageInfoId: 'orgPageInfo', countId: 'orgCount', emptyRowId: 'orgEmptyRow',
+        sortHeaderId: 'orgSortDept', defaultPageSize: 10,
+      });
     </script>
   `);
 }
@@ -519,39 +516,40 @@ function renderPolicyAccess(session) {
   const grants = policy.getGrants();
   const users = auth.listUsers();
   const serviceNames = Object.keys(services);
+  const deptNames = Object.keys(deptPolicy);
   const byDept = groupByDept(users, { includeAdmins: false });
-  const deptCount = Object.keys(deptPolicy).length;
+  const deptCount = deptNames.length;
   const totalMembers = Array.from(byDept.values()).reduce((n, m) => n + m.length, 0);
 
-  const nodes = Object.keys(deptPolicy).map((dept) => {
+  const deptRows = deptNames.map((dept) => {
     const members = byDept.get(dept) || [];
     const deptChips = serviceNames.map((name) => {
       const on = (deptPolicy[dept] || []).includes(name);
       return chipForm('/policy/dept', { dept, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
     }).join('');
-
-    const memberRows = members.length
-      ? members.map(([email, u]) => {
-          const cells = serviceNames.map((name) => {
-            const on = (grants[email] || []).includes(name);
-            return chipForm('/policy/individual', { email, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
-          }).join('');
-          const searchKey = `${u.name} ${email}`.toLowerCase();
-          return `<div class="org-row org-row-wide org-row-person" data-search="${searchKey}">
-            <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name} <span class="muted">(${email})</span></span>
-            <span class="chip-cell">${cells || '<span class="muted">등록된 사내시스템 없음</span>'}</span>
-          </div>`;
-        }).join('')
-      : '<div class="org-row org-row-wide org-row-person"><span class="org-tree-cell muted">소속 임직원 없음</span><span></span></div>';
-
-    return `<details class="org-node dept-node">
-      <summary class="org-row org-row-wide org-row-dept">
-        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span>${members.length ? avatarStack(members, 20, 4) : ''}</span>
-        <span class="chip-cell">${deptChips || '<span class="muted">등록된 사내시스템 없음</span>'}</span>
-      </summary>
-      <div class="org-children">${memberRows}</div>
-    </details>`;
+    return `<tr data-row data-search="${dept.toLowerCase()}" data-dept="${dept}">
+      <td><span class="cell-name">${avatar(dept, 24)} ${dept} <span class="dept-count">${members.length}명</span></span></td>
+      <td><span class="chip-cell">${deptChips || '<span class="muted">등록된 사내시스템 없음</span>'}</span></td>
+    </tr>`;
   }).join('');
+
+  const memberRows = Array.from(byDept.entries()).flatMap(([dept, members]) =>
+    members.map(([email, u]) => {
+      const cells = serviceNames.map((name) => {
+        const on = (grants[email] || []).includes(name);
+        return chipForm('/policy/individual', { email, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
+      }).join('');
+      const searchKey = `${u.name} ${email}`.toLowerCase();
+      return `<tr data-row data-search="${searchKey}" data-dept="${dept}">
+        <td><span class="cell-name">${avatar(u.name, 26)} ${u.name}</span></td>
+        <td class="cell-muted">${email}</td>
+        <td>${dept}</td>
+        <td><span class="chip-cell">${cells || '<span class="muted">등록된 사내시스템 없음</span>'}</span></td>
+      </tr>`;
+    })
+  ).join('');
+
+  const deptOptions = `<option value="">전체 부서</option>` + deptNames.map((d) => `<option value="${d}">${d}</option>`).join('');
 
   return adminShell('/policy/access', session, '정책 접근관리', `
     <div class="tiles">
@@ -560,33 +558,74 @@ function renderPolicyAccess(session) {
       <div class="tile"><div class="tile-icon">${ICON.apps}</div><div><div class="num">${serviceNames.length}</div><div class="label">등록된 사내시스템</div></div></div>
     </div>
 
-    <div class="org-search">
-      <div style="position:relative;max-width:340px">
-        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
-        <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" oninput="filterOrgSearch(this.value)">
+    <div class="table-panel">
+      <div class="table-banner">
+        <span class="t-title">부서별 기본 정책</span>
+        <span class="t-desc">여기서 켠 시스템은 그 부서 전체에 적용됩니다.</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th style="width:220px">부서</th><th>사내시스템</th></tr></thead>
+          <tbody>
+            ${deptRows}
+            ${deptNames.length ? '' : '<tr class="table-empty-row"><td colspan="2">등록된 부서가 없습니다.</td></tr>'}
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <div style="margin-bottom:12px;color:var(--muted);font-size:13px">
-      부서를 펼치면 소속 임직원별 개인 추가 권한(부서 정책 위에 더해짐)이 나옵니다. 부서 칩은 그 부서
-      전체에 적용되고, 펼친 안의 칩은 그 사람 한 명에게만 적용됩니다.
+    <div class="table-panel">
+      <div class="table-banner">
+        <span class="t-title">개인별 추가 권한</span>
+        <span class="t-desc">부서 정책 위에 이 사람에게만 추가로 더해지는 권한입니다.</span>
+      </div>
+      <div class="table-filter-row">
+        <select class="dept-select" id="grantDeptFilter">${deptOptions}</select>
+        <div class="table-search">
+          <span style="position:relative">
+            <input type="text" id="grantSearchInput" placeholder="이름 또는 이메일로 검색" style="padding-left:34px">
+            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
+          </span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" id="grantTable">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>이메일</th>
+              <th class="sortable" id="grantSortDept">부서 <span class="sort-arrow">▾</span></th>
+              <th>개인 추가 권한</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${memberRows}
+            <tr class="table-empty-row" id="grantEmptyRow" style="display:none"><td colspan="4">등록된 임직원이 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-pagination">
+        <select class="page-size" id="grantPageSize">
+          <option value="10">10개씩 보기</option>
+          <option value="25">25개씩 보기</option>
+          <option value="50">50개씩 보기</option>
+        </select>
+        <div class="page-nav">
+          <button type="button" id="grantPrev">‹</button>
+          <span class="page-count" id="grantPageInfo">1 / 1 페이지</span>
+          <button type="button" id="grantNext">›</button>
+          <span class="page-count" id="grantCount"></span>
+        </div>
+      </div>
     </div>
-    ${nodes || '<div class="muted">등록된 부서가 없습니다.</div>'}
 
-    <script>
-      function filterOrgSearch(q) {
-        q = q.trim().toLowerCase();
-        document.querySelectorAll('.dept-node').forEach((node) => {
-          let anyMatch = !q;
-          node.querySelectorAll('.org-row-person').forEach((row) => {
-            const match = !q || (row.dataset.search || '').includes(q);
-            row.style.display = match ? '' : 'none';
-            if (match && q) anyMatch = true;
-          });
-          node.style.display = anyMatch ? '' : 'none';
-          if (q && anyMatch) node.open = true;
-        });
-      }
+    <script>${TABLE_JS}
+      initTable({
+        tableId: 'grantTable', searchId: 'grantSearchInput', deptSelectId: 'grantDeptFilter',
+        pageSizeId: 'grantPageSize', prevId: 'grantPrev', nextId: 'grantNext',
+        pageInfoId: 'grantPageInfo', countId: 'grantCount', emptyRowId: 'grantEmptyRow',
+        sortHeaderId: 'grantSortDept', defaultPageSize: 10,
+      });
     </script>
   `);
 }
@@ -595,6 +634,82 @@ function chipForm(actionPath, fields, label, on) {
   const hidden = Object.entries(fields).map(([k, v]) => `<input type="hidden" name="${k}" value="${v}">`).join('');
   return `<form class="inline" method="POST" action="/_ob/api/admin${actionPath}">${hidden}<button class="chip ${on ? 'on' : 'off'}" type="submit">${label}</button></form>`;
 }
+
+// A toggle-switch styled submit button — same idea as chipForm but for
+// boolean on/off state (used by 계정통제's 차단 스위치).
+function switchForm(actionPath, fields, isOn, onLabel, offLabel) {
+  const hidden = Object.entries(fields).map(([k, v]) => `<input type="hidden" name="${k}" value="${v}">`).join('');
+  return `<form class="inline" method="POST" action="/_ob/api/admin${actionPath}">${hidden}
+    <button type="submit" class="switch ${isOn ? 'on' : ''}">
+      <span class="track"></span>
+      <span class="switch-label">${isOn ? onLabel : offLabel}</span>
+    </button>
+  </form>`;
+}
+
+// Shared client-side controller for the flat data-table pattern (조직도 /
+// 정책접근관리 / 계정통제 all use this instead of a dept tree): search +
+// optional dept filter + optional dept-column sort + pagination, all done by
+// hiding/reordering the already-rendered <tr> elements — no server round trip.
+const TABLE_JS = `
+function initTable(opts) {
+  const table = document.getElementById(opts.tableId);
+  const tbody = table.querySelector('tbody');
+  let allRows = Array.from(tbody.querySelectorAll('tr[data-row]'));
+  let page = 1;
+  let pageSize = opts.defaultPageSize || 10;
+  let sortDir = 1;
+
+  function getFiltered() {
+    const q = (document.getElementById(opts.searchId) || {}).value;
+    const query = (q || '').trim().toLowerCase();
+    const deptEl = opts.deptSelectId && document.getElementById(opts.deptSelectId);
+    const dept = deptEl ? deptEl.value : '';
+    return allRows.filter((r) => {
+      const matchesQ = !query || (r.dataset.search || '').includes(query);
+      const matchesDept = !dept || r.dataset.dept === dept;
+      return matchesQ && matchesDept;
+    });
+  }
+
+  function render() {
+    const filtered = getFiltered();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    if (page > totalPages) page = totalPages;
+    const start = (page - 1) * pageSize;
+    allRows.forEach((r) => { r.style.display = 'none'; });
+    filtered.slice(start, start + pageSize).forEach((r) => { r.style.display = ''; });
+    if (opts.pageInfoId) document.getElementById(opts.pageInfoId).textContent = page + ' / ' + totalPages + ' 페이지';
+    if (opts.countId) document.getElementById(opts.countId).textContent = '전체 ' + filtered.length + '개 중 ' + (filtered.length ? start + 1 : 0) + '-' + Math.min(start + pageSize, filtered.length);
+    if (opts.prevId) document.getElementById(opts.prevId).disabled = page <= 1;
+    if (opts.nextId) document.getElementById(opts.nextId).disabled = page >= totalPages;
+    if (opts.emptyRowId) document.getElementById(opts.emptyRowId).style.display = filtered.length ? 'none' : '';
+  }
+
+  const searchEl = document.getElementById(opts.searchId);
+  if (searchEl) searchEl.addEventListener('input', () => { page = 1; render(); });
+  const deptEl = opts.deptSelectId && document.getElementById(opts.deptSelectId);
+  if (deptEl) deptEl.addEventListener('change', () => { page = 1; render(); });
+  const pageSizeEl = opts.pageSizeId && document.getElementById(opts.pageSizeId);
+  if (pageSizeEl) pageSizeEl.addEventListener('change', (e) => { pageSize = parseInt(e.target.value, 10) || allRows.length; page = 1; render(); });
+  const prevEl = opts.prevId && document.getElementById(opts.prevId);
+  if (prevEl) prevEl.addEventListener('click', () => { page = Math.max(1, page - 1); render(); });
+  const nextEl = opts.nextId && document.getElementById(opts.nextId);
+  if (nextEl) nextEl.addEventListener('click', () => { page += 1; render(); });
+  const sortEl = opts.sortHeaderId && document.getElementById(opts.sortHeaderId);
+  if (sortEl) sortEl.addEventListener('click', () => {
+    sortDir *= -1;
+    allRows.sort((a, b) => sortDir * (a.dataset.dept || '').localeCompare(b.dataset.dept || '', 'ko'));
+    allRows.forEach((r) => tbody.appendChild(r));
+    const arrow = sortEl.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = sortDir === 1 ? '▾' : '▴';
+    page = 1;
+    render();
+  });
+
+  render();
+}
+`;
 
 const RULE_LABELS = {
   businessHours: '업무시간 외 접속 차단',
@@ -630,7 +745,7 @@ function renderSessions(session) {
   const sessions = auth.listActiveSessions();
   const sessRows = sessions.map((s) => `
     <tr>
-      <td>${avatar(s.name, 22)} ${s.name} <span class="muted">(${s.email})</span></td><td>${s.ip}</td><td>${fmtTime(s.loginAt)}</td><td>${fmtTime(s.lastSeenAt)}</td>
+      <td><span class="cell-name">${avatar(s.name, 22)} ${s.name} <span class="muted">(${s.email})</span></span></td><td>${s.ip}</td><td>${fmtTime(s.loginAt)}</td><td>${fmtTime(s.lastSeenAt)}</td>
       <td><form class="inline" method="POST" action="/_ob/api/admin/sessions/terminate">
         <input type="hidden" name="sessionId" value="${s.id}">
         <button class="btn danger" type="submit">세션 종료</button>
@@ -638,40 +753,24 @@ function renderSessions(session) {
     </tr>`).join('');
 
   const users = auth.listUsers();
-  const byDept = groupByDept(users, { includeAdmins: true });
+  const deptNames = Object.keys(policy.getDeptPolicy());
   const totalCount = Object.keys(users).length;
   const blockedCount = Object.values(users).filter((u) => u.blocked).length;
   const lockedCount = Object.values(users).filter((u) => u.lockedUntil && Date.now() < u.lockedUntil).length;
 
-  const acctNodes = Array.from(byDept.entries()).map(([dept, members]) => {
-    const memberRows = members.map(([email, u]) => {
-      const locked = u.lockedUntil && Date.now() < u.lockedUntil;
-      const searchKey = `${u.name} ${email}`.toLowerCase();
-      return `<div class="org-row org-row-wide org-row-person" data-search="${searchKey}">
-        <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''} <span class="muted">(${email})</span></span>
-        <span class="chip-cell" style="justify-content:flex-end;align-items:center">
-          ${u.blocked ? '<span class="tag-deny">차단됨</span>' : '<span class="tag-ok">정상</span>'}
-          ${locked ? `<span class="tag-warn">잠김 (~${fmtTime(u.lockedUntil)})</span>` : ''}
-          <form class="inline" method="POST" action="/_ob/api/admin/users/${u.blocked ? 'unblock' : 'block'}">
-            <input type="hidden" name="email" value="${email}">
-            <button class="btn ${u.blocked ? 'ghost' : 'danger'} btn-sm" type="submit">${u.blocked ? '차단 해제' : '계정 차단'}</button>
-          </form>
-          ${locked ? `<form class="inline" method="POST" action="/_ob/api/admin/users/unlock"><input type="hidden" name="email" value="${email}"><button class="btn ghost btn-sm" type="submit">잠금 해제</button></form>` : ''}
-        </span>
-      </div>`;
-    }).join('');
-
-    return `<details class="org-node dept-node">
-      <summary class="org-row org-row-wide org-row-dept">
-        <span class="org-tree-cell">${avatar(dept, 30)} <span class="dept-name">${dept}</span><span class="dept-count">${members.length}명</span>${members.length ? avatarStack(members, 20, 4) : ''}</span>
-        <span class="chip-cell" style="justify-content:flex-end">
-          ${chipForm('/org/dept-block', { dept, action: 'block' }, '부서 전체 차단', false)}
-          ${chipForm('/org/dept-block', { dept, action: 'unblock' }, '부서 전체 해제', false)}
-        </span>
-      </summary>
-      <div class="org-children">${memberRows}</div>
-    </details>`;
+  const acctRows = Object.entries(users).map(([email, u]) => {
+    const locked = u.lockedUntil && Date.now() < u.lockedUntil;
+    const searchKey = `${u.name} ${email}`.toLowerCase();
+    return `<tr data-row data-search="${searchKey}" data-dept="${u.dept}">
+      <td><span class="cell-name">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
+      <td class="cell-muted">${email}</td>
+      <td>${u.dept}</td>
+      <td>${locked ? `<span class="tag-warn">잠김 (~${fmtTime(u.lockedUntil)})</span> ${chipForm('/users/unlock', { email }, '잠금 해제', false)}` : '<span class="tag-ok">정상</span>'}</td>
+      <td>${switchForm(`/users/${u.blocked ? 'unblock' : 'block'}`, { email }, u.blocked, '차단', '정상')}</td>
+    </tr>`;
   }).join('');
+
+  const deptOptions = `<option value="">전체 부서</option>` + deptNames.map((d) => `<option value="${d}">${d}</option>`).join('');
 
   return adminShell('/policy/sessions', session, '활성세션·계정통제', `
     <div class="tiles">
@@ -680,34 +779,72 @@ function renderSessions(session) {
       <div class="tile"><div class="tile-icon">${ICON.rules}</div><div><div class="num">${lockedCount}</div><div class="label">잠긴 계정</div></div></div>
     </div>
 
-    <div class="card">
-      <div style="margin-bottom:10px;font-weight:600">활성 세션</div>
-      <table><thead><tr><th>사용자</th><th>IP</th><th>로그인</th><th>최근활동</th><th></th></tr></thead><tbody>${sessRows || '<tr><td colspan="5">활성 세션 없음</td></tr>'}</tbody></table>
-    </div>
-
-    <div style="margin:18px 0 10px;font-weight:600">계정 통제 (부서별)</div>
-    <div class="org-search">
-      <div style="position:relative;max-width:340px">
-        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
-        <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" oninput="filterOrgSearch(this.value)">
+    <div class="table-panel">
+      <div class="table-banner">
+        <span class="t-title">활성 세션</span>
+        <span class="t-desc">지금 로그인되어 있는 웹 세션입니다.</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr><th>사용자</th><th>IP</th><th>로그인</th><th>최근활동</th><th></th></tr></thead>
+          <tbody>${sessRows || '<tr class="table-empty-row"><td colspan="5">활성 세션 없음</td></tr>'}</tbody>
+        </table>
       </div>
     </div>
-    ${acctNodes || '<div class="muted">등록된 부서가 없습니다.</div>'}
 
-    <script>
-      function filterOrgSearch(q) {
-        q = q.trim().toLowerCase();
-        document.querySelectorAll('.dept-node').forEach((node) => {
-          let anyMatch = !q;
-          node.querySelectorAll('.org-row-person').forEach((row) => {
-            const match = !q || (row.dataset.search || '').includes(q);
-            row.style.display = match ? '' : 'none';
-            if (match && q) anyMatch = true;
-          });
-          node.style.display = anyMatch ? '' : 'none';
-          if (q && anyMatch) node.open = true;
-        });
-      }
+    <div class="table-panel">
+      <div class="table-banner">
+        <span class="t-title">계정 통제</span>
+        <span class="t-desc">차단이 켜진 계정은 로그인·브릿지·커넥터 전부 즉시 막힙니다.</span>
+      </div>
+      <div class="table-filter-row">
+        <select class="dept-select" id="acctDeptFilter">${deptOptions}</select>
+        <div class="table-search">
+          <span style="position:relative">
+            <input type="text" id="acctSearchInput" placeholder="이름 또는 이메일로 검색" style="padding-left:34px">
+            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
+          </span>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" id="acctTable">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>이메일</th>
+              <th class="sortable" id="acctSortDept">부서 <span class="sort-arrow">▾</span></th>
+              <th>상태</th>
+              <th>차단</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${acctRows}
+            <tr class="table-empty-row" id="acctEmptyRow" style="display:none"><td colspan="5">등록된 임직원이 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-pagination">
+        <select class="page-size" id="acctPageSize">
+          <option value="10">10개씩 보기</option>
+          <option value="25">25개씩 보기</option>
+          <option value="50">50개씩 보기</option>
+        </select>
+        <div class="page-nav">
+          <button type="button" id="acctPrev">‹</button>
+          <span class="page-count" id="acctPageInfo">1 / 1 페이지</span>
+          <button type="button" id="acctNext">›</button>
+          <span class="page-count" id="acctCount"></span>
+        </div>
+      </div>
+    </div>
+
+    <script>${TABLE_JS}
+      initTable({
+        tableId: 'acctTable', searchId: 'acctSearchInput', deptSelectId: 'acctDeptFilter',
+        pageSizeId: 'acctPageSize', prevId: 'acctPrev', nextId: 'acctNext',
+        pageInfoId: 'acctPageInfo', countId: 'acctCount', emptyRowId: 'acctEmptyRow',
+        sortHeaderId: 'acctSortDept', defaultPageSize: 10,
+      });
     </script>
   `);
 }
