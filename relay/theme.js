@@ -158,7 +158,22 @@ const CSS = `
   .data-table tbody tr:hover { background: var(--bg); }
   .data-table .cell-muted { color: var(--muted); }
   .data-table .cell-name { display: flex; align-items: center; gap: 10px; }
+  .data-table .cell-indent { padding-left: 22px; }
+  .data-table .cell-indent-2 { padding-left: 44px; }
   .table-empty-row td { text-align: center; color: var(--muted); padding: 32px 16px; }
+
+  /* expandable company/dept/person rows inside a .data-table (조직도) */
+  .dept-group-row td { font-weight: 600; }
+  .dept-group-row .dept-count { font-weight: 400; }
+  .expand-cell { text-align: center; }
+  .expand-btn {
+    border: none; background: none; cursor: pointer; color: var(--muted); font-size: 11px;
+    width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 6px;
+  }
+  .expand-btn:hover { background: var(--bg); color: var(--text); }
+  .dept-icon { color: var(--blue); display: inline-flex; }
+  .person-icon { color: var(--muted); display: inline-flex; }
 
   .switch { position: relative; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; border: none; background: none; padding: 0; font: inherit; }
   .switch .track { width: 40px; height: 22px; border-radius: 11px; background: var(--border); position: relative; transition: background .15s; flex-shrink: 0; }

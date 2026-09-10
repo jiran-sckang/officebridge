@@ -163,48 +163,67 @@ function renderOrgChart(session) {
   const users = auth.listUsers();
   const deptPolicy = policy.getDeptPolicy();
   const deptNames = Object.keys(deptPolicy);
+  const byDept = groupByDept(users, { includeAdmins: true });
   const totalCount = Object.keys(users).length;
   const deptCount = deptNames.length;
   const installedCount = Object.keys(users).filter((email) => auth.getBridgeTokenFor(email)).length;
 
-  const deptChips = deptNames.map((dept) => {
-    const count = Object.values(users).filter((u) => u.dept === dept).length;
-    const deleteBtn = count === 0
-      ? `<form class="inline" method="POST" action="/_ob/api/admin/org/dept-delete" onsubmit="return confirm('${dept} 부서를 삭제할까요?')">
-          <input type="hidden" name="dept" value="${dept}">
-          <button type="submit" class="dept-chip-x" title="부서 삭제">×</button>
-        </form>`
-      : '';
-    return `<span class="dept-chip">${avatar(dept, 20)} ${dept} <span class="dept-chip-count">${count}명</span>${deleteBtn}</span>`;
-  }).join('');
+  const companyRow = `<tr class="dept-group-row company-row">
+    <td class="expand-cell"><button type="button" class="expand-btn" id="company-toggle" onclick="toggleRows('[data-parent=company]', this)">▾</button></td>
+    <td colspan="2"><span class="cell-name">${ICON.company} <b>${TENANT_NAME}</b> <span class="dept-count">${totalCount}명</span></span></td>
+    <td class="cell-muted">설치 ${installedCount}/${totalCount}</td>
+    <td></td>
+  </tr>`;
 
-  const rows = Object.entries(users).map(([email, u]) => {
-    const token = auth.getBridgeTokenFor(email);
-    const bridgeCell = token
-      ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
-      : '<span class="muted">미설치</span>';
-    const searchKey = `${u.name} ${email}`.toLowerCase();
-    return `<tr data-row data-search="${searchKey}" data-dept="${u.dept}">
-      <td><span class="cell-name">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
-      <td class="cell-muted">${email}</td>
-      <td>${u.dept}</td>
-      <td>${bridgeCell}</td>
+  const bodyRows = deptNames.map((dept, i) => {
+    const members = byDept.get(dept) || [];
+    const groupId = 'grp' + i;
+    const installedInDept = members.filter(([email]) => auth.getBridgeTokenFor(email)).length;
+
+    const deptRow = `<tr class="dept-group-row" data-parent="company" data-search="${dept.toLowerCase()}">
+      <td class="expand-cell"><button type="button" class="expand-btn" id="${groupId}-toggle" onclick="toggleRows('[data-group=${groupId}]', this)">▾</button></td>
+      <td colspan="2"><span class="cell-name cell-indent"><span class="dept-icon">${ICON.folder}</span> <b>${dept}</b> <span class="dept-count">${members.length}명</span></span></td>
+      <td class="cell-muted">설치 ${installedInDept}/${members.length}</td>
       <td>
-        <details class="row-menu">
-          <summary>${ICON.gear}</summary>
-          <div class="menu">
-            <button type="button" onclick="event.preventDefault();openEditMember(this,'${email}','${u.name}','${u.dept}')">사용자 수정</button>
-            <form method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
-              <input type="hidden" name="email" value="${email}">
-              <button type="submit" class="danger-text">사용자 삭제</button>
-            </form>
-          </div>
-        </details>
+        <button type="button" class="btn ghost btn-sm" onclick="openAddMember('${dept}')">${ICON.plus}</button>
+        ${members.length === 0
+          ? `<form class="inline" method="POST" action="/_ob/api/admin/org/dept-delete" onsubmit="return confirm('${dept} 부서를 삭제할까요?')">
+              <input type="hidden" name="dept" value="${dept}">
+              <button type="submit" class="btn ghost btn-sm" title="부서 삭제">×</button>
+            </form>`
+          : ''}
       </td>
     </tr>`;
+
+    const memberRows = members.map(([email, u]) => {
+      const token = auth.getBridgeTokenFor(email);
+      const bridgeCell = token
+        ? `<span class="tag-ok">설치됨</span> ${chipForm('/org/bridge-revoke', { email }, '접근 회수', false)}`
+        : '<span class="muted">미설치</span>';
+      const searchKey = `${u.name} ${email}`.toLowerCase();
+      return `<tr class="dept-group-member" data-group="${groupId}" data-parent="company" data-search="${searchKey}">
+        <td></td>
+        <td><span class="cell-name cell-indent-2"><span class="person-icon">${ICON.person}</span> ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
+        <td class="cell-muted">${email}</td>
+        <td>${bridgeCell}</td>
+        <td>
+          <details class="row-menu">
+            <summary>${ICON.gear}</summary>
+            <div class="menu">
+              <button type="button" onclick="event.preventDefault();openEditMember(this,'${email}','${u.name}','${dept}')">사용자 수정</button>
+              <form method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
+                <input type="hidden" name="email" value="${email}">
+                <button type="submit" class="danger-text">사용자 삭제</button>
+              </form>
+            </div>
+          </details>
+        </td>
+      </tr>`;
+    }).join('');
+
+    return deptRow + memberRows;
   }).join('');
 
-  const deptOptions = `<option value="">전체 부서</option>` + deptNames.map((d) => `<option value="${d}">${d}</option>`).join('');
   const deptOptionsPlain = deptNames.map((d) => `<option value="${d}">${d}</option>`).join('');
 
   return adminShell('/org', session, '조직도', `
@@ -214,24 +233,19 @@ function renderOrgChart(session) {
       <div class="tile"><div class="tile-icon">${ICON.access}</div><div><div class="num">${installedCount} / ${totalCount}</div><div class="label">브릿지 설치</div></div></div>
     </div>
 
-    <div style="margin-bottom:20px">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:8px">부서</div>
-      <div class="dept-chip-row">
-        ${deptChips}
-        <button type="button" class="btn ghost btn-sm" onclick="document.getElementById('addDeptDialog').showModal()">${ICON.plus} 부서 추가</button>
-      </div>
-    </div>
-
     <div class="table-panel">
       <div class="table-banner">
-        <span class="t-title">임직원</span>
-        <span class="t-desc">전체 ${totalCount}명 · 브릿지 설치 ${installedCount}/${totalCount}</span>
+        <span class="t-title">조직도</span>
+        <span class="t-desc">전체 ${totalCount}명 · 부서 ${deptCount}개</span>
       </div>
       <div class="table-filter-row">
-        <select class="dept-select" id="orgDeptFilter">${deptOptions}</select>
+        <div>
+          <button type="button" class="btn ghost btn-sm" onclick="document.getElementById('addDeptDialog').showModal()">${ICON.plus} 부서 추가</button>
+          <button type="button" class="btn ghost btn-sm" onclick="openAddMember('')">${ICON.plus} 사용자 추가</button>
+        </div>
         <div class="table-search">
           <span style="position:relative">
-            <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" style="padding-left:34px">
+            <input type="text" id="orgSearchInput" placeholder="이름 또는 이메일로 검색" style="padding-left:34px" oninput="filterOrgTree(this.value)">
             <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)">${ICON.search}</span>
           </span>
         </div>
@@ -240,32 +254,19 @@ function renderOrgChart(session) {
         <table class="data-table" id="orgTable">
           <thead>
             <tr>
-              <th>이름</th>
+              <th style="width:36px"></th>
+              <th>부서명 / 사용자 이름</th>
               <th>이메일</th>
-              <th class="sortable" id="orgSortDept">부서 <span class="sort-arrow">▾</span></th>
               <th>브릿지</th>
               <th>설정</th>
             </tr>
           </thead>
           <tbody>
-            ${rows}
-            <tr class="table-empty-row" id="orgEmptyRow" style="display:none"><td colspan="5">등록된 임직원이 없습니다.</td></tr>
+            ${companyRow}
+            ${bodyRows}
+            ${deptNames.length ? '' : '<tr class="table-empty-row"><td colspan="5">등록된 부서가 없습니다.</td></tr>'}
           </tbody>
         </table>
-      </div>
-      <div class="table-pagination">
-        <select class="page-size" id="orgPageSize">
-          <option value="10">10개씩 보기</option>
-          <option value="25">25개씩 보기</option>
-          <option value="50">50개씩 보기</option>
-        </select>
-        <div class="page-nav">
-          <button type="button" id="orgPrev">‹</button>
-          <span class="page-count" id="orgPageInfo">1 / 1 페이지</span>
-          <button type="button" id="orgNext">›</button>
-          <span class="page-count" id="orgCount"></span>
-        </div>
-        <button type="button" class="table-toolbar-btn" onclick="openAddMember()">${ICON.plus} 임직원 추가</button>
       </div>
     </div>
 
@@ -295,7 +296,7 @@ function renderOrgChart(session) {
         <label>이메일</label>
         <input type="email" name="email" required>
         <label>부서</label>
-        <select name="dept" required>${deptOptionsPlain}</select>
+        <select name="dept" id="addMemberDeptField" required>${deptOptionsPlain}</select>
         <label>초기 비밀번호</label>
         <input type="password" name="password" required>
         <div class="modal-actions">
@@ -322,8 +323,38 @@ function renderOrgChart(session) {
       </form>
     </dialog>
 
-    <script>${TABLE_JS}
-      function openAddMember() {
+    <script>
+      function toggleRows(selector, btn) {
+        const rows = document.querySelectorAll(selector);
+        if (!rows.length) return;
+        const willHide = rows[0].style.display !== 'none';
+        rows.forEach((r) => { r.style.display = willHide ? 'none' : ''; });
+        btn.textContent = willHide ? '▸' : '▾';
+      }
+      function filterOrgTree(q) {
+        q = q.trim().toLowerCase();
+        document.querySelectorAll('#orgTable .dept-group-row:not(.company-row)').forEach((deptRow) => {
+          const toggle = deptRow.querySelector('.expand-btn');
+          const groupId = toggle.id.replace('-toggle', '');
+          const memberRows = document.querySelectorAll('tr[data-group="' + groupId + '"]');
+          if (!q) {
+            deptRow.style.display = '';
+            memberRows.forEach((r) => { r.style.display = ''; });
+            toggle.textContent = '▾';
+            return;
+          }
+          let anyMatch = (deptRow.dataset.search || '').includes(q);
+          memberRows.forEach((r) => {
+            const match = (r.dataset.search || '').includes(q);
+            r.style.display = match ? '' : 'none';
+            if (match) anyMatch = true;
+          });
+          deptRow.style.display = anyMatch ? '' : 'none';
+          if (anyMatch) toggle.textContent = '▾';
+        });
+      }
+      function openAddMember(dept) {
+        if (dept) document.getElementById('addMemberDeptField').value = dept;
         document.getElementById('addMemberDialog').showModal();
       }
       function openEditMember(trigger, email, name, dept) {
@@ -335,12 +366,6 @@ function renderOrgChart(session) {
         document.getElementById('editMemberDeptField').value = dept;
         document.getElementById('editMemberDialog').showModal();
       }
-      initTable({
-        tableId: 'orgTable', searchId: 'orgSearchInput', deptSelectId: 'orgDeptFilter',
-        pageSizeId: 'orgPageSize', prevId: 'orgPrev', nextId: 'orgNext',
-        pageInfoId: 'orgPageInfo', countId: 'orgCount', emptyRowId: 'orgEmptyRow',
-        sortHeaderId: 'orgSortDept', defaultPageSize: 10,
-      });
     </script>
   `);
 }
