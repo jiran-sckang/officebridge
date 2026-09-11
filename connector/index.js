@@ -5,6 +5,7 @@
 // web UI (admin-web.js) started alongside it.
 const http = require('http');
 const https = require('https');
+const net = require('net');
 const WebSocket = require('ws');
 
 const config = require('./config');
@@ -24,6 +25,11 @@ const HEARTBEAT_TIMEOUT_MS = 45000;
 let ws;
 let heartbeatTimer;
 let lastHeartbeat;
+
+// Raw TCP channels currently open on behalf of the relay (SSH/RDP-style
+// services, mapped with a "tcp://host:port" internal address instead of the
+// usual http(s):// one). id -> net.Socket.
+const tcpSockets = new Map();
 
 function register() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -65,10 +71,19 @@ function connect() {
       return;
     }
     if (msg.type === 'request') return handleRequest(msg);
+    if (msg.type === 'tcp-open') return handleTcpOpen(msg);
+    if (msg.type === 'tcp-data') return handleTcpData(msg);
+    if (msg.type === 'tcp-close') return handleTcpClose(msg);
   });
 
   ws.on('close', () => {
     clearInterval(heartbeatTimer);
+    // The tunnel is gone — any open tcp sockets can't report their close
+    // back to the relay anyway, so just tear them down locally.
+    for (const [id, socket] of tcpSockets) {
+      tcpSockets.delete(id);
+      socket.destroy();
+    }
     console.log(`[connector] tunnel closed, reconnecting in ${RECONNECT_MS}ms`);
     setTimeout(connect, RECONNECT_MS);
   });
@@ -151,6 +166,63 @@ function sendResponse(id, status, headers, bodyBuffer) {
       body: bodyBuffer.toString('base64'),
     })
   );
+}
+
+function sendTcpMsg(obj) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify(obj));
+}
+
+// Mapped like "erp": "tcp://127.0.0.1:2222" in services.json (as opposed to
+// the usual http(s):// address) — a plain host:port to open a raw socket
+// against, for services like SSH that aren't HTTP at all.
+function handleTcpOpen({ id, service }) {
+  const base = state.enabledAddresses().get(service);
+  if (!base || !base.startsWith('tcp://')) {
+    console.error(`[connector] no enabled tcp mapping for "${service}" (missing, wrong scheme, or disabled)`);
+    return sendTcpMsg({ type: 'tcp-open-error', id, reason: 'service unavailable' });
+  }
+
+  let target;
+  try {
+    target = new URL(base);
+  } catch {
+    return sendTcpMsg({ type: 'tcp-open-error', id, reason: 'invalid internal address' });
+  }
+
+  let opened = false;
+  const socket = net.createConnection({ host: target.hostname, port: Number(target.port) }, () => {
+    opened = true;
+    sendTcpMsg({ type: 'tcp-open-ack', id });
+  });
+  tcpSockets.set(id, socket);
+
+  socket.on('data', (chunk) => sendTcpMsg({ type: 'tcp-data', id, data: chunk.toString('base64') }));
+  socket.on('close', () => {
+    tcpSockets.delete(id);
+    sendTcpMsg({ type: 'tcp-close', id });
+  });
+  // net.Socket always fires 'close' right after 'error', which reports the
+  // close above — so only 'error' needs to special-case the not-yet-opened
+  // case (a plain tcp-close would look like a clean disconnect instead of
+  // a connection failure).
+  socket.on('error', (err) => {
+    console.error(`[connector] tcp upstream error for "${service}":`, err.message);
+    if (!opened) sendTcpMsg({ type: 'tcp-open-error', id, reason: err.message });
+  });
+}
+
+function handleTcpData({ id, data }) {
+  const socket = tcpSockets.get(id);
+  if (socket) socket.write(Buffer.from(data, 'base64'));
+}
+
+function handleTcpClose({ id }) {
+  const socket = tcpSockets.get(id);
+  if (socket) {
+    tcpSockets.delete(id);
+    socket.destroy();
+  }
 }
 
 // Any change made through the local admin web UI (add/remove/toggle) is

@@ -12,6 +12,14 @@ let currentOperator = null; // admin email that authenticated this connection, o
 let registeredServices = new Map(); // name -> internalAddress, as currently reported by the connector
 const pending = new Map(); // id -> { resolve, reject, timeout }
 
+// Raw TCP channels (SSH/RDP-style forwarding) multiplexed over the same
+// single connector socket, alongside the request/response traffic above.
+// Each channel id maps to whoever is consuming the bytes on the relay side
+// (see server.js's /tunnel/ssh upgrade handler) — this module doesn't know
+// or care what that consumer is, it just ferries data + lifecycle events.
+const tcpChannels = new Map(); // id -> { onData, onClose }
+const pendingTcpOpens = new Map(); // id -> { resolve, reject, timeout }
+
 function validateToken(token) {
   return auth.validateConnectorToken(token).ok;
 }
@@ -56,6 +64,30 @@ function acceptConnection(ws, token) {
         pending.delete(msg.id);
         p.resolve(msg);
       }
+    } else if (msg.type === 'tcp-open-ack') {
+      const p = pendingTcpOpens.get(msg.id);
+      if (p) {
+        clearTimeout(p.timeout);
+        pendingTcpOpens.delete(msg.id);
+        p.resolve(msg.id);
+      }
+    } else if (msg.type === 'tcp-open-error') {
+      const p = pendingTcpOpens.get(msg.id);
+      if (p) {
+        clearTimeout(p.timeout);
+        pendingTcpOpens.delete(msg.id);
+        tcpChannels.delete(msg.id);
+        p.reject(Object.assign(new Error(msg.reason || 'connector refused tcp-open'), { code: 'UPSTREAM_REFUSED' }));
+      }
+    } else if (msg.type === 'tcp-data') {
+      const ch = tcpChannels.get(msg.id);
+      if (ch) ch.onData(Buffer.from(msg.data, 'base64'));
+    } else if (msg.type === 'tcp-close') {
+      const ch = tcpChannels.get(msg.id);
+      if (ch) {
+        tcpChannels.delete(msg.id);
+        ch.onClose();
+      }
     }
   });
 
@@ -65,6 +97,17 @@ function acceptConnection(ws, token) {
       connectorSocket = null;
       currentOperator = null;
       registeredServices = new Map();
+    }
+    // The whole tunnel dropped — every open tcp channel riding on it is dead
+    // too, even though nothing told us so explicitly. Tell each consumer.
+    for (const [id, ch] of tcpChannels) {
+      tcpChannels.delete(id);
+      ch.onClose();
+    }
+    for (const [id, p] of pendingTcpOpens) {
+      pendingTcpOpens.delete(id);
+      clearTimeout(p.timeout);
+      p.reject(Object.assign(new Error('tunnel closed'), { code: 'NO_CONNECTOR' }));
     }
     console.log('[relay] connector tunnel closed');
   });
@@ -116,6 +159,42 @@ function forward(serviceName, method, reqPath, headers, bodyBuffer, timeoutMs = 
   });
 }
 
+// Opens a raw byte-stream channel to a service the connector serves —
+// used for TCP-style access (SSH, RDP, DB clients) as opposed to the
+// HTTP request/response forwarding above. Resolves once the connector
+// confirms it actually connected to the internal target, with a small
+// controller for sending bytes in and closing the channel.
+function openTcpChannel(serviceName, { onData, onClose }, timeoutMs = 10000) {
+  if (!servesService(serviceName)) {
+    return Promise.reject(Object.assign(new Error('no connector for service'), { code: 'NO_CONNECTOR' }));
+  }
+  const id = crypto.randomUUID();
+  const opened = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingTcpOpens.delete(id);
+      tcpChannels.delete(id);
+      reject(Object.assign(new Error('upstream timeout'), { code: 'TIMEOUT' }));
+    }, timeoutMs);
+    pendingTcpOpens.set(id, { resolve, reject, timeout });
+    tcpChannels.set(id, { onData, onClose });
+    connectorSocket.send(JSON.stringify({ type: 'tcp-open', id, service: serviceName }));
+  });
+  return opened.then(() => ({
+    id,
+    send(buf) {
+      if (connectorSocket && connectorSocket.readyState === WebSocket.OPEN) {
+        connectorSocket.send(JSON.stringify({ type: 'tcp-data', id, data: buf.toString('base64') }));
+      }
+    },
+    close() {
+      tcpChannels.delete(id);
+      if (connectorSocket && connectorSocket.readyState === WebSocket.OPEN) {
+        connectorSocket.send(JSON.stringify({ type: 'tcp-close', id }));
+      }
+    },
+  }));
+}
+
 module.exports = {
   validateToken,
   acceptConnection,
@@ -126,4 +205,5 @@ module.exports = {
   getRegisteredServices,
   getRegisteredServiceAddress,
   forward,
+  openTcpChannel,
 };
