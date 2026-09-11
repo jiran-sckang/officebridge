@@ -485,14 +485,29 @@ function handleSshUpgrade(req, socket, head, parsedUrl) {
   }
 
   wss.handleUpgrade(req, socket, head, (ws) => {
+    // The client (ssh, mstsc, ...) starts writing the instant its WS handshake
+    // completes, but opening the channel to the connector needs a network
+    // round trip first — attaching the 'message' listener only once that
+    // resolves would silently drop whatever arrived in between (Node doesn't
+    // buffer events for listeners added later). Listen from the start and
+    // queue anything that shows up before the channel is ready.
+    const buffered = [];
+    let channel = null;
+    ws.on('message', (data) => {
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      if (channel) channel.send(buf);
+      else buffered.push(buf);
+    });
+
     tunnel
       .openTcpChannel(serviceName, {
         onData: (buf) => { if (ws.readyState === WebSocket.OPEN) ws.send(buf); },
         onClose: () => ws.close(),
       })
-      .then((channel) => {
+      .then((ch) => {
+        channel = ch;
         audit.log({ type: 'ACCESS', verdict: 'ALLOW', user: session.email, service: serviceName, ip, reason: 'TCP 터널 연결' });
-        ws.on('message', (data) => channel.send(Buffer.isBuffer(data) ? data : Buffer.from(data)));
+        buffered.splice(0).forEach((buf) => channel.send(buf));
         ws.on('close', () => channel.close());
         ws.on('error', () => channel.close());
       })
