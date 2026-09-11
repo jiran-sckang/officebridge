@@ -11,3 +11,8 @@ build/
 # that IS code (the clean-bootstrap template for a brand-new deployment).
 /data/*.json
 /data/audit.log
+
+# Same reasoning, same incident category: each deployment's own domain/
+# tenant name is not code either. config.example.js is the tracked
+# template — copy it to config.js once per deployment and never again.
+/relay/config.js
