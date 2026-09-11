@@ -48,10 +48,6 @@ const NAV = [
   { path: '/downloads', label: '커넥터 설치', icon: ICON.download },
 ];
 
-function initial(name) {
-  return (name || '?').trim().slice(0, 1).toUpperCase();
-}
-
 function adminShell(activePath, session, title, bodyHtml) {
   const nav = NAV.map((item) =>
     item.group
@@ -66,7 +62,7 @@ function adminShell(activePath, session, title, bodyHtml) {
     <div class="topbar">
       <div class="brand">Office<span>Bridge</span> <span class="tenant-badge">${TENANT_NAME} 관리자 콘솔</span></div>
       <details class="user-menu">
-        <summary><span class="avatar">${initial(session.name)}</span>${session.name}</summary>
+        <summary><span class="avatar">${ICON.company}</span>${session.name}</summary>
         <div class="menu">
           <div class="who-line">${session.name} · ${session.dept}</div>
           <a href="/account">프로필 수정</a>
