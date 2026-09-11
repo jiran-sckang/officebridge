@@ -105,7 +105,7 @@ function verifyPassword(email, password) {
 }
 
 // Returns { ok, sessionId } on success, or { ok: false, reason } on failure.
-function login(email, password, ip) {
+function login(email, password, ip, totpCode) {
   // Admins always keep web access — otherwise turning bridgeOnlyAccess on
   // could lock everyone, including the admin who'd need to turn it back
   // off, out of the console at the same time.
@@ -115,6 +115,16 @@ function login(email, password, ip) {
   }
   const result = verifyPassword(email, password);
   if (!result.ok) return result;
+  // Same second-factor check as the connector/bridge apps — but only once
+  // actually enrolled. An account with mfaRequired but no mfaSecret yet
+  // must still be able to log in here, or there'd be no way to ever reach
+  // the enrollment page (/security or /mfa) in the first place.
+  if (result.user.mfaSecret) {
+    if (!totpCode) return { ok: false, needsMfa: true, reason: 'MFA 인증 코드를 입력해주세요.' };
+    if (!totp.verifyTotp(result.user.mfaSecret, totpCode)) {
+      return { ok: false, needsMfa: true, reason: 'MFA 코드가 올바르지 않습니다.' };
+    }
+  }
   return { ok: true, sessionId: createSession(email, ip) };
 }
 

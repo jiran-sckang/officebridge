@@ -135,12 +135,12 @@ async function handleInternal(req, res, ctx) {
     const body = await readFormBody(req);
     if (body.companyCode !== TENANT_NAME) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email, service: '-', ip, reason: '회사코드 불일치' });
-      return sendHtml(res, 401, loginPage({ next: body.next, companyCode: body.companyCode, error: '회사코드가 올바르지 않습니다.' }));
+      return sendHtml(res, 401, loginPage({ next: body.next, companyCode: body.companyCode, email: body.email, error: '회사코드가 올바르지 않습니다.' }));
     }
-    const result = auth.login(body.email, body.password, ip);
+    const result = auth.login(body.email, body.password, ip, body.totpCode);
     if (!result.ok) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email, service: '-', ip, reason: result.reason });
-      return sendHtml(res, 401, loginPage({ next: body.next, companyCode: body.companyCode, error: result.reason }));
+      return sendHtml(res, 401, loginPage({ next: body.next, companyCode: body.companyCode, email: body.email, error: result.reason, needsMfa: !!result.needsMfa }));
     }
     audit.log({ type: 'LOGIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '로그인 성공' });
     setCookie(res, result.sessionId);
