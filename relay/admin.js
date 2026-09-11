@@ -724,9 +724,13 @@ function chipForm(actionPath, fields, label, on) {
 
 // A toggle-switch styled submit button — same idea as chipForm but for
 // boolean on/off state (used by 계정통제's 차단 스위치).
-function switchForm(actionPath, fields, isOn, onLabel, offLabel) {
+// confirmOnMessage, if given, only fires when the switch is about to flip
+// ON (e.g. warning before a block, not before an unblock) — turning
+// something off is rarely the surprising direction.
+function switchForm(actionPath, fields, isOn, onLabel, offLabel, confirmOnMessage) {
   const hidden = Object.entries(fields).map(([k, v]) => `<input type="hidden" name="${k}" value="${v}">`).join('');
-  return `<form class="inline" method="POST" action="/_ob/api/admin${actionPath}">${hidden}
+  const onsubmit = confirmOnMessage && !isOn ? ` onsubmit="return confirm('${confirmOnMessage}')"` : '';
+  return `<form class="inline" method="POST" action="/_ob/api/admin${actionPath}"${onsubmit}>${hidden}
     <button type="submit" class="switch ${isOn ? 'on' : ''}">
       <span class="track"></span>
       <span class="switch-label">${isOn ? onLabel : offLabel}</span>
@@ -855,7 +859,7 @@ function renderSessions(session) {
       <td class="cell-muted">${email}</td>
       <td>${u.dept}</td>
       <td>${locked ? `<span class="tag-warn">잠김 (~${fmtTime(u.lockedUntil)})</span> ${chipForm('/users/unlock', { email }, '잠금 해제', false)}` : '<span class="tag-ok">정상</span>'}</td>
-      <td>${switchForm(`/users/${u.blocked ? 'unblock' : 'block'}`, { email }, u.blocked, '차단', '정상')}</td>
+      <td>${switchForm(`/users/${u.blocked ? 'unblock' : 'block'}`, { email }, u.blocked, '차단', '정상', `${u.name}(${email}) 계정을 차단합니다 — 즉시 로그아웃되고 다시 로그인할 수 없게 됩니다. 계속할까요?`)}</td>
     </tr>`;
   }).join('');
 
@@ -1243,6 +1247,12 @@ const actions = {
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `세션 강제 종료: ${target ? target.email : sessionId}` });
   },
   'users/block'(body, session, ip) {
+    if (body.email === session.email) {
+      // self-block would lock the admin out with no one left to undo it —
+      // the same reasoning as the self-role-demotion guard in org/update
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `본인 계정 차단 시도 거부: ${body.email}` });
+      return;
+    }
     auth.blockUser(body.email);
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `계정 차단: ${body.email}` });
   },
