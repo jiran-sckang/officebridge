@@ -154,7 +154,7 @@ function page(services, connected, policy, policyError, logs, logsError) {
       <form method="POST" action="/services">
         <div class="row">
           <div><input type="text" name="name" placeholder="서비스명 (릴레이에 등록된 이름과 동일해야 함, 예: erp)" required></div>
-          <div><input type="text" name="internalAddress" placeholder="내부주소 (예: http://127.0.0.1:8081, SSH 등은 tcp://127.0.0.1:22)" required></div>
+          <div><input type="text" name="internalAddress" placeholder="내부주소 (예: http://127.0.0.1:8081)" required></div>
         </div>
         <button class="btn" type="submit">추가</button>
       </form>

@@ -226,10 +226,11 @@ async function handleInternal(req, res, ctx) {
       res.writeHead(401);
       return res.end('회사코드가 올바르지 않습니다.');
     }
-    const result = auth.registerBridge(body.email, body.password, body.totpCode);
+    const result = auth.registerBridge(body.email, body.password);
     if (!result.ok) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `브릿지 앱 등록 실패: ${result.reason}` });
-      return sendJson(res, 401, { reason: result.reason, needsMfa: !!result.needsMfa, needsEnrollment: !!result.needsEnrollment });
+      res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end(result.reason);
     }
     audit.log({ type: 'ADMIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '브릿지 앱 최초 등록' });
     return sendJson(res, 200, { bridgeToken: result.bridgeToken, name: result.user.name, dept: result.user.dept });
@@ -257,7 +258,7 @@ async function handleInternal(req, res, ctx) {
     const result = auth.registerConnector(body.email, body.password, body.totpCode);
     if (!result.ok) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `커넥터 앱 등록 실패: ${result.reason}` });
-      return sendJson(res, 401, { reason: result.reason, needsMfa: !!result.needsMfa, needsEnrollment: !!result.needsEnrollment });
+      return sendJson(res, 401, { reason: result.reason, needsMfa: !!result.needsMfa });
     }
     audit.log({ type: 'ADMIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '커넥터 앱 로그인' });
     return sendJson(res, 200, { connectorToken: result.connectorToken, name: result.user.name });
@@ -350,42 +351,6 @@ async function handleInternal(req, res, ctx) {
     return res.end();
   }
 
-  // A regular employee's own MFA enrollment (bridge app), separate from the
-  // admin-only route above — any authenticated session may manage its OWN
-  // account's MFA here, nothing else. Handled directly rather than through
-  // admin.actions: that dispatch table's mfa-confirm hardcodes a redirect
-  // back to the admin domain, which a non-admin session can't even reach.
-  if (pathname.startsWith('/_ob/api/portal/')) {
-    const session = auth.getSession(sessionId);
-    if (!session) {
-      res.writeHead(403);
-      return res.end('forbidden');
-    }
-    const actionKey = pathname.replace('/_ob/api/portal/', '');
-    const body = await readFormBody(req);
-    const mfaHome = `https://portal.${DOMAIN}/mfa`;
-    if (actionKey === 'security/mfa-start') {
-      auth.startMfaEnroll(session.email);
-      audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 설정 시작 (포털)' });
-      res.writeHead(302, { Location: mfaHome });
-      return res.end();
-    }
-    if (actionKey === 'security/mfa-confirm') {
-      const result = auth.confirmMfaEnroll(session.email, body.code);
-      audit.log({ type: 'ADMIN', verdict: result.ok ? 'OK' : 'FAIL', user: session.email, service: '-', ip, reason: result.ok ? 'MFA 활성화 완료 (포털)' : `MFA 확인 실패: ${result.reason}` });
-      res.writeHead(302, { Location: `${mfaHome}${result.ok ? '' : '?mfaError=1'}` });
-      return res.end();
-    }
-    if (actionKey === 'security/mfa-disable') {
-      auth.disableMfa(session.email);
-      audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 비활성화 (포털)' });
-      res.writeHead(302, { Location: mfaHome });
-      return res.end();
-    }
-    res.writeHead(404);
-    return res.end('not found');
-  }
-
   res.writeHead(404);
   res.end('not found');
 }
@@ -434,7 +399,6 @@ async function mainHandler(req, res) {
   }
 
   if (label === 'portal') {
-    if (pathname === '/mfa') return sendHtml(res, 200, portal.renderMfaPage(session, Object.fromEntries(parsedUrl.searchParams)));
     return sendHtml(res, 200, portal.renderPortal(session));
   }
 
@@ -494,73 +458,8 @@ const server = https.createServer(
 
 const wss = new WebSocket.Server({ noServer: true });
 
-// A logged-in user's own raw byte-stream connection to a "tcp://" service
-// (SSH, RDP, DB clients — anything that isn't HTTP). Auth reuses the exact
-// same session cookie and policy.isAllowed() check as ordinary HTTP access;
-// this is just a different transport for the same authorization model, not
-// a separate one. See relay/tunnel.js's openTcpChannel for the other half.
-function handleSshUpgrade(req, socket, head, parsedUrl) {
-  const serviceName = parsedUrl.searchParams.get('service');
-  const cookies = parseCookies(req.headers.cookie);
-  const session = auth.getSession(cookies[COOKIE_NAME]);
-  const ip = clientIp(req);
-
-  if (!session) {
-    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-    return socket.destroy();
-  }
-  if (!serviceName || !policy.isAllowed(session, serviceName)) {
-    audit.log({ type: 'ACCESS', verdict: 'DENY', user: session.email, service: serviceName || '-', ip, reason: 'TCP 터널 정책 미허용' });
-    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
-    return socket.destroy();
-  }
-  if (!tunnel.servesService(serviceName)) {
-    audit.log({ type: 'SYSTEM', verdict: 'FAIL', user: session.email, service: serviceName, ip, reason: '커넥터 연결 없음' });
-    socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
-    return socket.destroy();
-  }
-
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    // The client (ssh, mstsc, ...) starts writing the instant its WS handshake
-    // completes, but opening the channel to the connector needs a network
-    // round trip first — attaching the 'message' listener only once that
-    // resolves would silently drop whatever arrived in between (Node doesn't
-    // buffer events for listeners added later). Listen from the start and
-    // queue anything that shows up before the channel is ready.
-    const buffered = [];
-    let channel = null;
-    ws.on('message', (data) => {
-      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-      if (channel) channel.send(buf);
-      else buffered.push(buf);
-    });
-
-    tunnel
-      .openTcpChannel(serviceName, {
-        onData: (buf) => { if (ws.readyState === WebSocket.OPEN) ws.send(buf); },
-        onClose: () => ws.close(),
-      })
-      .then((ch) => {
-        channel = ch;
-        audit.log({ type: 'ACCESS', verdict: 'ALLOW', user: session.email, service: serviceName, ip, reason: 'TCP 터널 연결' });
-        buffered.splice(0).forEach((buf) => channel.send(buf));
-        ws.on('close', () => channel.close());
-        ws.on('error', () => channel.close());
-      })
-      .catch((err) => {
-        audit.log({ type: 'SYSTEM', verdict: 'FAIL', user: session.email, service: serviceName, ip, reason: err.message });
-        ws.close(1011, 'upstream unavailable');
-      });
-  });
-}
-
 server.on('upgrade', (req, socket, head) => {
   const parsedUrl = new URL(req.url, 'https://x');
-
-  if (parsedUrl.pathname === '/tunnel/ssh') {
-    return handleSshUpgrade(req, socket, head, parsedUrl);
-  }
-
   if (parsedUrl.pathname !== '/tunnel') {
     socket.destroy();
     return;

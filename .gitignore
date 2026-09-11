@@ -1,11 +1,9 @@
 node_modules/
 run/
 *.log
-*.pid
 certs/*.pem
 .DS_Store
 build/
-ssh-client/.bridge-token.json
 
 # Live server state — real per-deployment data, not code. Never track this:
 # a code deploy (git archive/clone) must never able to clobber a running

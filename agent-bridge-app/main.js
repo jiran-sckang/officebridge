@@ -77,14 +77,8 @@ function postJson(hostname, urlPath, body) {
         res.on('end', () => {
           const text = Buffer.concat(chunks).toString('utf8');
           if (res.statusCode !== 200) {
-            // bridge/register replies with a JSON {reason,needsMfa,...} body;
-            // bridge/exchange still replies with plain text ("unauthorized")
-            // — this has to tolerate both without knowing which call it is.
-            let data = null;
-            try { data = JSON.parse(text); } catch { /* plain-text error */ }
-            const err = new Error((data && data.reason) || text || `relay responded ${res.statusCode}`);
+            const err = new Error(text || `relay responded ${res.statusCode}`);
             err.statusCode = res.statusCode;
-            err.data = data;
             return reject(err);
           }
           try {
@@ -148,32 +142,14 @@ ipcMain.handle('bridge:openService', async (_event, serviceUrl) => {
   await shell.openExternal(enterUrl);
 });
 
-ipcMain.handle('bridge:register', async (_event, { relayDomain: enteredDomain, companyCode, email, password, totpCode }) => {
+ipcMain.handle('bridge:register', async (_event, { relayDomain: enteredDomain, companyCode, email, password }) => {
   const targetDomain = (enteredDomain || '').trim() || defaultRelayDomain;
-  // Resolved (never thrown) with an {ok:false,...} shape on failure — same
-  // reasoning as the connector app: a thrown error loses everything but
-  // .message crossing the IPC boundary, and needsMfa/needsEnrollment need
-  // to reach the renderer intact.
-  try {
-    const result = await postJson(targetDomain, '/_ob/api/bridge/register', { companyCode, email, password, totpCode });
-    defaultRelayDomain = targetDomain;
-    saveRelayDomain(defaultRelayDomain);
-    config = { relayDomain: targetDomain, bridgeToken: result.bridgeToken };
-    saveConfig(config);
-    return { ok: true, name: result.name, dept: result.dept };
-  } catch (err) {
-    return {
-      ok: false,
-      reason: err.message,
-      needsMfa: !!(err.data && err.data.needsMfa),
-      needsEnrollment: !!(err.data && err.data.needsEnrollment),
-      relayDomain: targetDomain,
-    };
-  }
-});
-
-ipcMain.handle('bridge:openExternal', async (_event, url) => {
-  shell.openExternal(url);
+  const result = await postJson(targetDomain, '/_ob/api/bridge/register', { companyCode, email, password });
+  defaultRelayDomain = targetDomain;
+  saveRelayDomain(defaultRelayDomain);
+  config = { relayDomain: targetDomain, bridgeToken: result.bridgeToken };
+  saveConfig(config);
+  return { name: result.name, dept: result.dept };
 });
 
 ipcMain.handle('bridge:forget', async () => {

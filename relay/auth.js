@@ -157,21 +157,9 @@ function getBridgeTokenFor(email) {
 // One-time app setup: the bridge app itself verifies the employee's normal
 // password (same one they'd use on the portal) and gets a personal token
 // back to keep — no admin has to manually generate and hand over a file.
-function registerBridge(email, password, totpCode) {
+function registerBridge(email, password) {
   const result = verifyPassword(email, password);
   if (!result.ok) return result;
-  // Same MFA gate as registerConnector — the bridge token, once issued, is
-  // reused indefinitely without a password, so this one-time password+code
-  // check is the only point that actually verifies the second factor.
-  if (result.user.mfaRequired && !result.user.mfaSecret) {
-    return { ok: false, needsEnrollment: true, reason: '관리자가 이 계정에 2차 인증을 필수로 지정했습니다. 먼저 등록해주세요.' };
-  }
-  if (result.user.mfaSecret) {
-    if (!totpCode) return { ok: false, needsMfa: true, reason: 'MFA 인증 코드를 입력해주세요.' };
-    if (!totp.verifyTotp(result.user.mfaSecret, totpCode)) {
-      return { ok: false, needsMfa: true, reason: 'MFA 코드가 올바르지 않습니다.' };
-    }
-  }
   return { ok: true, bridgeToken: issueBridgeToken(email), user: result.user };
 }
 
@@ -216,11 +204,7 @@ function registerConnector(email, password, totpCode) {
   if (!result.ok) return result;
   if (result.user.role !== 'admin') return { ok: false, reason: '커넥터는 관리자 계정으로만 실행할 수 있습니다.' };
   if (result.user.mfaRequired && !result.user.mfaSecret) {
-    // Distinct from needsMfa below (already enrolled, just needs a code) —
-    // this account hasn't enrolled at all yet, so the connector app should
-    // send them to the enrollment page rather than prompt for a code it
-    // knows can't exist.
-    return { ok: false, needsEnrollment: true, reason: '관리자가 이 계정에 2차 인증을 필수로 지정했습니다. 먼저 등록해주세요.' };
+    return { ok: false, reason: '관리자가 이 계정에 2차 인증을 필수로 지정했습니다. 포탈에 로그인해서 [2차 인증] 메뉴에서 먼저 등록해주세요.' };
   }
   if (result.user.mfaSecret) {
     if (!totpCode) return { ok: false, needsMfa: true, reason: 'MFA 인증 코드를 입력해주세요.' };

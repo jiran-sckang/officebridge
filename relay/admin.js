@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-const mfaUi = require('./mfa-ui');
 const auth = require('./auth');
 const policy = require('./policy');
 const rules = require('./rules');
@@ -383,7 +382,49 @@ function renderOrgChart(session) {
 
 function renderSecurity(session, query) {
   const status = auth.getMfaStatus(session.email);
-  let body = mfaUi.renderMfaCard(status, query, '/admin', '커넥터 앱');
+  let body;
+
+  if (status.enrolled) {
+    body = `
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px">
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">2차 인증 활성화됨</div>
+            <div class="muted" style="font-size:13px">커넥터 앱 로그인 시 비밀번호 다음 단계로 Google Authenticator 코드가 필요합니다.</div>
+          </div>
+          <form class="inline" method="POST" action="/_ob/api/admin/security/mfa-disable"><button class="btn danger" type="submit">비활성화</button></form>
+        </div>
+      </div>`;
+  } else if (status.pending) {
+    const errorBox = query.mfaError ? '<div class="error-box">코드가 올바르지 않습니다. 다시 시도해주세요.</div>' : '';
+    body = `
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:10px">1단계 — Google Authenticator에 등록</div>
+        <div class="muted" style="font-size:13px;margin-bottom:12px">
+          Google Authenticator 앱에서 "코드 스캔" 대신 "직접 입력"(수동 설정 키)을 선택하고 아래 키를 입력하세요.
+        </div>
+        <div style="font-family:'SFMono-Regular',Consolas,monospace;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-size:15px;letter-spacing:1px;margin-bottom:16px;word-break:break-all">
+          ${status.pendingSecret}
+        </div>
+        <div style="font-weight:600;margin-bottom:8px">2단계 — 앱에 뜨는 6자리 코드 입력해서 확인</div>
+        ${errorBox}
+        <form method="POST" action="/_ob/api/admin/security/mfa-confirm" style="max-width:200px">
+          <input type="text" name="code" inputmode="numeric" maxlength="6" placeholder="123456" required autofocus>
+          <button class="btn" type="submit" style="margin-top:10px">확인</button>
+        </form>
+      </div>`;
+  } else {
+    body = `
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:6px">${status.required ? '2차 인증이 필수로 지정되어 있습니다' : '2차 인증이 꺼져있습니다'}</div>
+        <div class="muted" style="font-size:13px;margin-bottom:14px">
+          ${status.required
+            ? '관리자가 이 계정에 2차 인증을 필수로 지정했습니다 — 등록 전까지는 커넥터 앱 로그인이 막힙니다. 지금 등록해주세요.'
+            : '커넥터 앱은 관리자 로그인만으로 사내망 터널을 열 수 있어, 비밀번호 하나가 뚫리면 그대로 뚫립니다. Google Authenticator 기반 2차 인증을 켜두는 걸 권장합니다.'}
+        </div>
+        ${chipForm('/security/mfa-start', {}, '2차 인증 설정 시작', false)}
+      </div>`;
+  }
 
   const users = auth.listUsers();
   const deptNames = Object.keys(policy.getDeptPolicy());
