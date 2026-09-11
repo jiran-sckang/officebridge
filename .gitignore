@@ -4,3 +4,10 @@ run/
 certs/*.pem
 .DS_Store
 build/
+
+# Live server state — real per-deployment data, not code. Never track this:
+# a code deploy (git archive/clone) must never able to clobber a running
+# server's actual users/policy/tokens. data/seed/ is the only data/ subtree
+# that IS code (the clean-bootstrap template for a brand-new deployment).
+/data/*.json
+/data/audit.log
