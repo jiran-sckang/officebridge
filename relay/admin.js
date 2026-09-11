@@ -429,7 +429,8 @@ function renderSecurity(session, query) {
   const users = auth.listUsers();
   const deptNames = Object.keys(policy.getDeptPolicy());
   const byDept = groupByDept(users, { includeAdmins: true });
-  const anyRequired = Object.values(users).some((u) => u.mfaRequired);
+  const totalCount = Object.keys(users).length;
+  const allRequiredGlobal = totalCount > 0 && Object.values(users).every((u) => u.mfaRequired);
 
   const mfaStatusTag = (email) => {
     const s = auth.getMfaStatus(email);
@@ -440,23 +441,30 @@ function renderSecurity(session, query) {
         : '<span class="muted">미등록</span>';
   };
 
+  const companyRow = `<tr class="dept-group-row company-row">
+    <td class="expand-cell"><button type="button" class="expand-btn" id="mfa-company-toggle" onclick="toggleRows('[data-parent=mfa-company]', this)">▾</button></td>
+    <td><span class="cell-name">${ICON.company} <b>${TENANT_NAME}</b> <span class="dept-count">${totalCount}명</span></span></td>
+    <td></td>
+    <td>${switchForm('/security/mfa-require-all', { required: allRequiredGlobal ? '0' : '1' }, allRequiredGlobal, '필수', '선택')}</td>
+  </tr>`;
+
   const deptGroupRows = deptNames.map((dept, i) => {
     const members = byDept.get(dept) || [];
     const groupId = 'mfagrp' + i;
     const allRequired = members.length > 0 && members.every(([, u]) => u.mfaRequired);
 
-    const deptRow = `<tr class="dept-group-row" data-search="${dept.toLowerCase()}">
+    const deptRow = `<tr class="dept-group-row" data-parent="mfa-company" data-search="${dept.toLowerCase()}">
       <td class="expand-cell"><button type="button" class="expand-btn" id="${groupId}-toggle" onclick="toggleRows('[data-group=${groupId}]', this)">▾</button></td>
-      <td><span class="cell-name"><span class="dept-icon">${ICON.folder}</span> <b>${dept}</b> <span class="dept-count">${members.length}명</span></span></td>
+      <td><span class="cell-name cell-indent"><span class="dept-icon">${ICON.folder}</span> <b>${dept}</b> <span class="dept-count">${members.length}명</span></span></td>
       <td></td>
-      <td>${chipForm('/security/mfa-require-dept', { dept, required: allRequired ? '0' : '1' }, allRequired ? '부서 전체 해제' : '부서 전체 필수화', allRequired)}</td>
+      <td>${switchForm('/security/mfa-require-dept', { dept, required: allRequired ? '0' : '1' }, allRequired, '필수', '선택')}</td>
     </tr>`;
 
-    const memberRows = members.map(([email, u]) => `<tr class="dept-group-member" data-group="${groupId}" data-search="${`${u.name} ${email}`.toLowerCase()}">
+    const memberRows = members.map(([email, u]) => `<tr class="dept-group-member" data-group="${groupId}" data-parent="mfa-company" data-search="${`${u.name} ${email}`.toLowerCase()}">
       <td></td>
       <td><span class="cell-name cell-indent-2"><span class="person-icon">${ICON.person}</span> ${u.name}${roleTag(u.role)} <span class="muted">(${email})</span></span></td>
       <td>${mfaStatusTag(email)}</td>
-      <td>${chipForm('/security/mfa-require', { email, required: u.mfaRequired ? '0' : '1' }, u.mfaRequired ? '필수 해제' : '필수로 지정', !!u.mfaRequired)}</td>
+      <td>${switchForm('/security/mfa-require', { email, required: u.mfaRequired ? '0' : '1' }, !!u.mfaRequired, '필수', '선택')}</td>
     </tr>`).join('');
 
     return deptRow + memberRows;
@@ -468,16 +476,15 @@ function renderSecurity(session, query) {
         <span class="t-title">계정별 2차 인증 필수 설정</span>
         <span class="t-desc">필수로 지정된 계정은 등록 전까지 커넥터 앱 로그인이 막힙니다.</span>
       </div>
-      <div class="table-filter-row">
-        <div class="muted" style="font-size:13px">
-          "필수로 지정"하면 본인이 [2차 인증] 메뉴에서 직접 등록해야 합니다 — 등록 값(비밀키)은 본인만 보고 관리자에겐 보이지 않습니다.
-        </div>
-        ${chipForm('/security/mfa-require-all', { required: anyRequired ? '0' : '1' }, anyRequired ? '전체 필수 해제' : '전체 계정에 필수화', anyRequired)}
+      <div style="padding:14px 20px 0;color:var(--muted);font-size:13px">
+        "필수"로 켜면 본인이 [2차 인증] 메뉴에서 직접 등록해야 합니다 — 등록 값(비밀키)은 본인만 보고 관리자에겐 보이지 않습니다.
+        맨 위 ${TENANT_NAME} 스위치로 전체를, 부서 스위치로 그 부서 전체를 한 번에 켜고 끌 수 있습니다.
       </div>
       <div style="overflow-x:auto">
         <table class="data-table" id="mfaTable">
           <thead><tr><th style="width:36px"></th><th>부서 / 사용자</th><th>등록 상태</th><th>필수 설정</th></tr></thead>
           <tbody>
+            ${companyRow}
             ${deptGroupRows}
             ${deptNames.length ? '' : '<tr class="table-empty-row"><td colspan="4">등록된 부서가 없습니다.</td></tr>'}
           </tbody>
