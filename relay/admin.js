@@ -49,7 +49,13 @@ const NAV = [
 ];
 
 function adminShell(activePath, session, title, bodyHtml) {
-  const nav = NAV.map((item) =>
+  // 부서장(dept_admin)은 정책 접근관리 한 화면만 위임받은 계정이라, 나머지
+  // 관리자 메뉴는 아예 사이드바에서 보이지 않아야 한다 — renderPage에서도
+  // 별도로 막지만, 안 보이는 메뉴를 눌러볼 일 자체가 없는 게 더 낫다.
+  const visibleNav = session.role === 'dept_admin'
+    ? NAV.filter((item) => item.path === '/policy/access')
+    : NAV;
+  const nav = visibleNav.map((item) =>
     item.group
       ? `<div class="group">${item.group}</div>`
       : `<a href="${item.path}" class="${item.path === activePath ? 'active' : ''}">${item.icon}<span>${item.label}</span></a>`
@@ -85,6 +91,12 @@ function adminShell(activePath, session, title, bodyHtml) {
 function fmtTime(ms) {
   if (!ms) return '-';
   return new Date(ms).toLocaleString('ko-KR');
+}
+
+function roleTag(role) {
+  if (role === 'admin') return ' <span class="tag-ok">관리자</span>';
+  if (role === 'dept_admin') return ' <span class="tag-warn">부서장</span>';
+  return '';
 }
 
 // ---- Page renderers -------------------------------------------------
@@ -189,14 +201,14 @@ function renderOrgChart(session) {
       const searchKey = `${u.name} ${email}`.toLowerCase();
       return `<tr class="dept-group-member" data-group="${groupId}" data-parent="company" data-search="${searchKey}">
         <td></td>
-        <td><span class="cell-name cell-indent-2"><span class="person-icon">${ICON.person}</span> ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
+        <td><span class="cell-name cell-indent-2"><span class="person-icon">${ICON.person}</span> ${u.name}${roleTag(u.role)}</span></td>
         <td class="cell-muted">${email}</td>
         <td>${bridgeCell}</td>
         <td>
           <details class="row-menu">
             <summary>${ICON.gear}</summary>
             <div class="menu">
-              <button type="button" onclick="event.preventDefault();openEditMember(this,'${email}','${u.name}','${dept}')">사용자 수정</button>
+              <button type="button" onclick="event.preventDefault();openEditMember(this,'${email}','${u.name}','${dept}','${u.role}')">사용자 수정</button>
               <form method="POST" action="/_ob/api/admin/org/delete" onsubmit="return confirm('${u.name}(${email})님을 조직도에서 삭제할까요? 브릿지/커넥터 접근도 함께 회수됩니다.')">
                 <input type="hidden" name="email" value="${email}">
                 <button type="submit" class="danger-text">사용자 삭제</button>
@@ -211,6 +223,7 @@ function renderOrgChart(session) {
   }).join('');
 
   const deptOptionsPlain = deptNames.map((d) => `<option value="${d}">${d}</option>`).join('');
+  const ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([v, label]) => `<option value="${v}">${label}</option>`).join('');
 
   return adminShell('/org', session, '조직도', `
     <div class="tiles">
@@ -275,7 +288,7 @@ function renderOrgChart(session) {
     </dialog>
 
     <dialog id="addMemberDialog" class="modal-box">
-      <form method="POST" action="/_ob/api/admin/org/create">
+      <form method="POST" action="/_ob/api/admin/org/create" onsubmit="return confirmRoleGrant(this)">
         <h3>임직원 추가</h3>
         <label>이름</label>
         <input type="text" name="name" required>
@@ -283,6 +296,8 @@ function renderOrgChart(session) {
         <input type="email" name="email" required>
         <label>부서</label>
         <select name="dept" id="addMemberDeptField" required>${deptOptionsPlain}</select>
+        <label>역할</label>
+        <select name="role">${ROLE_OPTIONS}</select>
         <label>초기 비밀번호</label>
         <input type="password" name="password" required>
         <div class="modal-actions">
@@ -293,7 +308,7 @@ function renderOrgChart(session) {
     </dialog>
 
     <dialog id="editMemberDialog" class="modal-box">
-      <form method="POST" action="/_ob/api/admin/org/update">
+      <form method="POST" action="/_ob/api/admin/org/update" onsubmit="return confirmRoleGrant(this)">
         <h3>사용자 수정</h3>
         <input type="hidden" name="email" id="editMemberEmailField">
         <label>이름</label>
@@ -302,6 +317,8 @@ function renderOrgChart(session) {
         <input type="email" name="newEmail" id="editMemberNewEmailField" required>
         <label>부서</label>
         <select name="dept" id="editMemberDeptField">${deptOptionsPlain}</select>
+        <label>역할</label>
+        <select name="role" id="editMemberRoleField">${ROLE_OPTIONS}</select>
         <div class="modal-actions">
           <button type="button" class="btn ghost" onclick="document.getElementById('editMemberDialog').close()">취소</button>
           <button class="btn" type="submit">저장</button>
@@ -343,14 +360,21 @@ function renderOrgChart(session) {
         if (dept) document.getElementById('addMemberDeptField').value = dept;
         document.getElementById('addMemberDialog').showModal();
       }
-      function openEditMember(trigger, email, name, dept) {
+      function openEditMember(trigger, email, name, dept, role) {
         const rowMenu = trigger.closest('.row-menu');
         if (rowMenu) rowMenu.open = false;
         document.getElementById('editMemberEmailField').value = email;
         document.getElementById('editMemberNameField').value = name;
         document.getElementById('editMemberNewEmailField').value = email;
         document.getElementById('editMemberDeptField').value = dept;
+        document.getElementById('editMemberRoleField').value = role;
         document.getElementById('editMemberDialog').showModal();
+      }
+      function confirmRoleGrant(form) {
+        const roleField = form.querySelector('select[name="role"]');
+        if (!roleField || roleField.value === 'user') return true;
+        const label = roleField.options[roleField.selectedIndex].text;
+        return confirm('"' + label + '" 권한을 부여합니다. 계속할까요?');
       }
     </script>
   `);
@@ -430,7 +454,7 @@ function renderSecurity(session, query) {
 
     const memberRows = members.map(([email, u]) => `<tr class="dept-group-member" data-group="${groupId}" data-search="${`${u.name} ${email}`.toLowerCase()}">
       <td></td>
-      <td><span class="cell-name cell-indent-2"><span class="person-icon">${ICON.person}</span> ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''} <span class="muted">(${email})</span></span></td>
+      <td><span class="cell-name cell-indent-2"><span class="person-icon">${ICON.person}</span> ${u.name}${roleTag(u.role)} <span class="muted">(${email})</span></span></td>
       <td>${mfaStatusTag(email)}</td>
       <td>${chipForm('/security/mfa-require', { email, required: u.mfaRequired ? '0' : '1' }, u.mfaRequired ? '필수 해제' : '필수로 지정', !!u.mfaRequired)}</td>
     </tr>`).join('');
@@ -565,8 +589,15 @@ function renderPolicyAccess(session) {
   const grants = policy.getGrants();
   const users = auth.listUsers();
   const serviceNames = Object.keys(services);
-  const deptNames = Object.keys(deptPolicy);
+  const isDeptAdmin = session.role === 'dept_admin';
+  // 부서장은 본인 부서만 보고 관리할 수 있다 — 다른 부서는 조회조차 안 됨.
+  const deptNames = isDeptAdmin ? Object.keys(deptPolicy).filter((d) => d === session.dept) : Object.keys(deptPolicy);
   const byDept = groupByDept(users, { includeAdmins: false });
+  if (isDeptAdmin) {
+    for (const dept of Array.from(byDept.keys())) {
+      if (dept !== session.dept) byDept.delete(dept);
+    }
+  }
   const deptCount = deptNames.length;
   const totalMembers = Array.from(byDept.values()).reduce((n, m) => n + m.length, 0);
 
@@ -760,6 +791,8 @@ function initTable(opts) {
 }
 `;
 
+const ROLE_LABELS = { user: '일반 사용자', dept_admin: '부서장', admin: '전체 관리자' };
+
 const RULE_LABELS = {
   businessHours: '업무시간 외 접속 차단',
   rateLimit: '과도한 요청 차단 (10초 내 다회 반복)',
@@ -811,7 +844,7 @@ function renderSessions(session) {
     const locked = u.lockedUntil && Date.now() < u.lockedUntil;
     const searchKey = `${u.name} ${email}`.toLowerCase();
     return `<tr data-row data-search="${searchKey}" data-dept="${u.dept}">
-      <td><span class="cell-name"><span class="person-icon">${ICON.person}</span> ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
+      <td><span class="cell-name"><span class="person-icon">${ICON.person}</span> ${u.name}${roleTag(u.role)}</span></td>
       <td class="cell-muted">${email}</td>
       <td>${u.dept}</td>
       <td>${locked ? `<span class="tag-warn">잠김 (~${fmtTime(u.lockedUntil)})</span> ${chipForm('/users/unlock', { email }, '잠금 해제', false)}` : '<span class="tag-ok">정상</span>'}</td>
@@ -1005,7 +1038,19 @@ function renderDownloads(session) {
   `);
 }
 
+// 부서장 계정이 위임받은 화면 밖으로 URL을 직접 쳐서 들어오는 경우까지
+// 막는다 — 사이드바에서 숨기는 것만으론 부족하다.
+const DEPT_ADMIN_ALLOWED_PATHS = new Set(['/policy/access', '/account']);
+
 function renderPage(pathname, session, query) {
+  if (session.role === 'dept_admin' && !DEPT_ADMIN_ALLOWED_PATHS.has(pathname)) {
+    return adminShell(pathname, session, '접근 제한', `
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:6px">이 화면은 부서장 계정에게 위임되지 않았습니다</div>
+        <div class="muted" style="font-size:13px">부서장 계정은 [정책 접근관리]에서 본인 부서의 사내시스템 권한만 관리할 수 있습니다.</div>
+      </div>
+    `);
+  }
   switch (pathname) {
     case '/dashboard': return renderDashboard(session);
     case '/policy/apps': return renderPolicyApps(session);
@@ -1090,13 +1135,14 @@ const actions = {
   },
   'org/create'(body, session, ip) {
     const { email, name, dept, password } = body;
-    const result = auth.createUser(email, { name, dept, password });
+    const role = ['user', 'dept_admin', 'admin'].includes(body.role) ? body.role : 'user';
+    const result = auth.createUser(email, { name, dept, password, role });
     if (!result.ok) {
       audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `임직원 등록 실패: ${email} (${result.reason})` });
       return;
     }
     policy.ensureDept(dept);
-    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 등록: ${name} (${email}, ${dept})` });
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 등록: ${name} (${email}, ${dept}, ${ROLE_LABELS[role]})` });
   },
   'org/bridge-revoke'(body, session, ip) {
     const { email } = body;
@@ -1106,17 +1152,25 @@ const actions = {
   'org/update'(body, session, ip) {
     const { email, name, newEmail, dept } = body;
     const trimmedNewEmail = (newEmail || '').trim();
+    let role = ['user', 'dept_admin', 'admin'].includes(body.role) ? body.role : undefined;
+    if (role && role !== 'admin' && email === session.email) {
+      // never let an admin strip their own admin role through this form —
+      // with only one full admin this would lock everyone out of the console
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `본인 관리자 권한 해제 시도 거부: ${email}` });
+      role = undefined;
+    }
     const result = auth.updateUser(email, {
       name: (name || '').trim() || undefined,
       dept: (dept || '').trim() || undefined,
       newEmail: trimmedNewEmail && trimmedNewEmail !== email ? trimmedNewEmail : undefined,
+      role,
     });
     if (!result.ok) {
       audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service: '-', ip, reason: `임직원 정보 수정 실패: ${email} (${result.reason})` });
       return;
     }
     if (result.email !== email) policy.renameGrants(email, result.email);
-    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 정보 수정: ${email} → 이름:${name}, 부서:${dept}${result.email !== email ? `, 이메일:${result.email}` : ''}` });
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `임직원 정보 수정: ${email} → 이름:${name}, 부서:${dept}${role ? `, 역할:${ROLE_LABELS[role]}` : ''}${result.email !== email ? `, 이메일:${result.email}` : ''}` });
   },
   'org/delete'(body, session, ip) {
     const { email } = body;
@@ -1150,11 +1204,22 @@ const actions = {
   },
   'policy/dept'(body, session, ip) {
     const { dept, service, allow } = body;
+    if (session.role === 'dept_admin' && dept !== session.dept) {
+      audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service, ip, reason: `부서 정책 변경 거부(권한 밖 부서): ${dept}` });
+      return;
+    }
     policy.toggleDeptAccess(dept, service, allow === '1');
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service, ip, reason: `부서 정책 변경: ${dept} → ${service} ${allow === '1' ? '부여' : '회수'}` });
   },
   'policy/individual'(body, session, ip) {
     const { email, service, allow } = body;
+    if (session.role === 'dept_admin') {
+      const target = auth.getUser(email);
+      if (!target || target.dept !== session.dept) {
+        audit.log({ type: 'ADMIN', verdict: 'FAIL', user: session.email, service, ip, reason: `개인 권한 변경 거부(권한 밖 사용자): ${email}` });
+        return;
+      }
+    }
     policy.toggleIndividualGrant(email, service, allow === '1');
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service, ip, reason: `개인 권한 변경: ${email} → ${service} ${allow === '1' ? '부여' : '회수'}` });
   },
@@ -1184,4 +1249,15 @@ const actions = {
   },
 };
 
-module.exports = { renderPage, actions };
+// server.js checks this before dispatching any POST action for a
+// 'dept_admin' session — the action functions above additionally verify the
+// target dept/user is actually theirs, but this keeps every other action
+// (조직도, 계정통제, 커넥터, 2차인증 등) unreachable in the first place.
+const DEPT_ADMIN_ALLOWED_ACTIONS = new Set([
+  'policy/dept',
+  'policy/individual',
+  'account/update-name',
+  'account/change-password',
+]);
+
+module.exports = { renderPage, actions, DEPT_ADMIN_ALLOWED_ACTIONS };

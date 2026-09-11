@@ -354,7 +354,7 @@ function deleteUser(email) {
 // users map (email is the primary key everywhere — tokens, sessions,
 // policy grants) so callers must also move anything keyed by email that
 // this module doesn't own (see policy.renameGrants, called from admin.js).
-function updateUser(email, { name, dept, newEmail }) {
+function updateUser(email, { name, dept, newEmail, role }) {
   const user = users[email];
   if (!user) return { ok: false, reason: '존재하지 않는 계정입니다.' };
 
@@ -375,6 +375,14 @@ function updateUser(email, { name, dept, newEmail }) {
 
   if (name !== undefined) user.name = name;
   if (dept !== undefined) user.dept = dept;
+  if (role !== undefined) {
+    user.role = role;
+    // a role change must take effect immediately, not just on next login —
+    // session.role is a snapshot from login time (see createSession)
+    for (const s of sessions.values()) {
+      if (s.email === currentEmail) s.role = role;
+    }
+  }
   persistUsers();
   return { ok: true, email: currentEmail };
 }

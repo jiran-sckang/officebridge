@@ -15,6 +15,13 @@ const connectorApi = require('./connectorApi');
 const { loginPage, blockPage } = require('./theme');
 const { DOMAIN, PORT, COOKIE_NAME, TENANT_NAME } = require('./config');
 
+// 'dept_admin' (부서장) may reach the admin domain too — admin.js itself
+// restricts them to /policy/access and rejects any action outside their own
+// department. Regular 'user' accounts still can't get in at all.
+function isAdminRole(role) {
+  return role === 'admin' || role === 'dept_admin';
+}
+
 const CERT_DIR = path.join(__dirname, '..', 'certs');
 const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
 // Both apps are safe to serve publicly: neither installer embeds a secret
@@ -321,7 +328,7 @@ async function handleInternal(req, res, ctx) {
 
   if (pathname.startsWith('/_ob/api/admin/')) {
     const session = auth.getSession(sessionId);
-    if (!session || session.role !== 'admin') {
+    if (!session || !isAdminRole(session.role)) {
       res.writeHead(403);
       return res.end('forbidden');
     }
@@ -330,6 +337,10 @@ async function handleInternal(req, res, ctx) {
     if (!fn) {
       res.writeHead(404);
       return res.end('not found');
+    }
+    if (session.role === 'dept_admin' && !admin.DEPT_ADMIN_ALLOWED_ACTIONS.has(actionKey)) {
+      res.writeHead(403);
+      return res.end('forbidden');
     }
     const body = await readFormBody(req);
     // An action may return a redirect path to use instead of the referer —
@@ -375,7 +386,7 @@ async function mainHandler(req, res) {
   }
 
   if (label === 'admin') {
-    if (session.role !== 'admin') {
+    if (!isAdminRole(session.role)) {
       audit.log({ type: 'ACCESS', verdict: 'DENY', user: session.email, service: 'admin', ip, reason: '관리자 권한 없음' });
       return sendBlockPage(res, 403, { code: 403, title: '접근 차단', message: '관리자 권한이 없습니다.' });
     }
