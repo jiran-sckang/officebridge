@@ -29,16 +29,6 @@ const ICON = {
   gear: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
 };
 
-const AVATAR_COLORS = ['#0c51a1', '#7c3aed', '#059669', '#c2410c', '#be123c', '#0891b2', '#a21caf', '#4d7c0f'];
-function avatarColor(seed) {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-function avatar(name, size) {
-  const initial = (name || '?').trim().slice(0, 1).toUpperCase();
-  return `<span class="avatar" style="width:${size}px;height:${size}px;background:${avatarColor(name || '?')};font-size:${Math.round(size * 0.42)}px">${initial}</span>`;
-}
 
 const NAV = [
   { path: '/dashboard', label: '대시보드', icon: ICON.dashboard },
@@ -229,7 +219,7 @@ function renderOrgChart(session) {
   return adminShell('/org', session, '조직도', `
     <div class="tiles">
       <div class="tile"><div class="tile-icon">${ICON.company}</div><div><div class="num">${totalCount}</div><div class="label">전체 임직원</div></div></div>
-      <div class="tile"><div class="tile-icon">${avatar(TENANT_NAME, 24)}</div><div><div class="num">${deptCount}</div><div class="label">부서 수</div></div></div>
+      <div class="tile"><div class="tile-icon">${ICON.folder}</div><div><div class="num">${deptCount}</div><div class="label">부서 수</div></div></div>
       <div class="tile"><div class="tile-icon">${ICON.access}</div><div><div class="num">${installedCount} / ${totalCount}</div><div class="label">브릿지 설치</div></div></div>
     </div>
 
@@ -417,35 +407,73 @@ function renderSecurity(session, query) {
   }
 
   const users = auth.listUsers();
+  const deptNames = Object.keys(policy.getDeptPolicy());
+  const byDept = groupByDept(users, { includeAdmins: true });
   const anyRequired = Object.values(users).some((u) => u.mfaRequired);
-  const userRows = Object.entries(users).map(([email, u]) => {
-    const mfaStatus = auth.getMfaStatus(email);
-    const statusTag = mfaStatus.enrolled
+
+  const mfaStatusTag = (email) => {
+    const s = auth.getMfaStatus(email);
+    return s.enrolled
       ? '<span class="tag-ok">등록됨</span>'
-      : mfaStatus.pending
+      : s.pending
         ? '<span class="tag-warn">등록 중</span>'
         : '<span class="muted">미등록</span>';
-    return `<div class="org-row org-row-wide org-row-person">
-      <span class="org-tree-cell">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''} <span class="muted">(${email})</span></span>
-      <span class="chip-cell" style="justify-content:flex-end">
-        ${statusTag}
-        ${chipForm('/security/mfa-require', { email, required: u.mfaRequired ? '0' : '1' }, u.mfaRequired ? '필수 해제' : '필수로 지정', !!u.mfaRequired)}
-      </span>
-    </div>`;
+  };
+
+  const deptGroupRows = deptNames.map((dept, i) => {
+    const members = byDept.get(dept) || [];
+    const groupId = 'mfagrp' + i;
+    const allRequired = members.length > 0 && members.every(([, u]) => u.mfaRequired);
+
+    const deptRow = `<tr class="dept-group-row" data-search="${dept.toLowerCase()}">
+      <td class="expand-cell"><button type="button" class="expand-btn" id="${groupId}-toggle" onclick="toggleRows('[data-group=${groupId}]', this)">▾</button></td>
+      <td><span class="cell-name"><span class="dept-icon">${ICON.folder}</span> <b>${dept}</b> <span class="dept-count">${members.length}명</span></span></td>
+      <td></td>
+      <td>${chipForm('/security/mfa-require-dept', { dept, required: allRequired ? '0' : '1' }, allRequired ? '부서 전체 해제' : '부서 전체 필수화', allRequired)}</td>
+    </tr>`;
+
+    const memberRows = members.map(([email, u]) => `<tr class="dept-group-member" data-group="${groupId}" data-search="${`${u.name} ${email}`.toLowerCase()}">
+      <td></td>
+      <td><span class="cell-name cell-indent-2"><span class="person-icon">${ICON.person}</span> ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''} <span class="muted">(${email})</span></span></td>
+      <td>${mfaStatusTag(email)}</td>
+      <td>${chipForm('/security/mfa-require', { email, required: u.mfaRequired ? '0' : '1' }, u.mfaRequired ? '필수 해제' : '필수로 지정', !!u.mfaRequired)}</td>
+    </tr>`).join('');
+
+    return deptRow + memberRows;
   }).join('');
 
   body += `
-    <div class="card" style="margin-top:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-        <div style="font-weight:600">계정별 2차 인증 필수 설정</div>
+    <div class="table-panel" style="margin-top:16px">
+      <div class="table-banner">
+        <span class="t-title">계정별 2차 인증 필수 설정</span>
+        <span class="t-desc">필수로 지정된 계정은 등록 전까지 커넥터 앱 로그인이 막힙니다.</span>
+      </div>
+      <div class="table-filter-row">
+        <div class="muted" style="font-size:13px">
+          "필수로 지정"하면 본인이 [2차 인증] 메뉴에서 직접 등록해야 합니다 — 등록 값(비밀키)은 본인만 보고 관리자에겐 보이지 않습니다.
+        </div>
         ${chipForm('/security/mfa-require-all', { required: anyRequired ? '0' : '1' }, anyRequired ? '전체 필수 해제' : '전체 계정에 필수화', anyRequired)}
       </div>
-      <div class="muted" style="font-size:13px;margin-bottom:10px">
-        여기서 "필수로 지정"하면 해당 계정은 커넥터 앱에 로그인하기 전에 먼저 [2차 인증] 메뉴에서 본인이 직접
-        등록해야 합니다 — 등록 값(비밀키)은 본인만 볼 수 있고 관리자에게 보이지 않습니다.
+      <div style="overflow-x:auto">
+        <table class="data-table" id="mfaTable">
+          <thead><tr><th style="width:36px"></th><th>부서 / 사용자</th><th>등록 상태</th><th>필수 설정</th></tr></thead>
+          <tbody>
+            ${deptGroupRows}
+            ${deptNames.length ? '' : '<tr class="table-empty-row"><td colspan="4">등록된 부서가 없습니다.</td></tr>'}
+          </tbody>
+        </table>
       </div>
-      ${userRows || '<div class="muted">등록된 계정이 없습니다.</div>'}
-    </div>`;
+    </div>
+
+    <script>
+      function toggleRows(selector, btn) {
+        const rows = document.querySelectorAll(selector);
+        if (!rows.length) return;
+        const willHide = rows[0].style.display !== 'none';
+        rows.forEach((r) => { r.style.display = willHide ? 'none' : ''; });
+        btn.textContent = willHide ? '▸' : '▾';
+      }
+    </script>`;
 
   return adminShell('/security', session, '2차 인증(MFA)', body);
 }
@@ -553,7 +581,7 @@ function renderPolicyAccess(session) {
       return chipForm('/policy/dept', { dept, service: name, allow: on ? '0' : '1' }, `${services[name].label}${on ? ' ✓' : ''}`, on);
     }).join('');
     return `<tr data-row data-search="${dept.toLowerCase()}" data-dept="${dept}">
-      <td><span class="cell-name">${avatar(dept, 24)} ${dept} <span class="dept-count">${members.length}명</span></span></td>
+      <td><span class="cell-name"><span class="dept-icon">${ICON.folder}</span> ${dept} <span class="dept-count">${members.length}명</span></span></td>
       <td><span class="chip-cell">${deptChips || '<span class="muted">등록된 사내시스템 없음</span>'}</span></td>
     </tr>`;
   }).join('');
@@ -566,7 +594,7 @@ function renderPolicyAccess(session) {
       }).join('');
       const searchKey = `${u.name} ${email}`.toLowerCase();
       return `<tr data-row data-search="${searchKey}" data-dept="${dept}">
-        <td><span class="cell-name">${avatar(u.name, 26)} ${u.name}</span></td>
+        <td><span class="cell-name"><span class="person-icon">${ICON.person}</span> ${u.name}</span></td>
         <td class="cell-muted">${email}</td>
         <td>${dept}</td>
         <td><span class="chip-cell">${cells || '<span class="muted">등록된 사내시스템 없음</span>'}</span></td>
@@ -770,7 +798,7 @@ function renderSessions(session) {
   const sessions = auth.listActiveSessions();
   const sessRows = sessions.map((s) => `
     <tr>
-      <td><span class="cell-name">${avatar(s.name, 22)} ${s.name} <span class="muted">(${s.email})</span></span></td><td>${s.ip}</td><td>${fmtTime(s.loginAt)}</td><td>${fmtTime(s.lastSeenAt)}</td>
+      <td><span class="cell-name"><span class="person-icon">${ICON.person}</span> ${s.name} <span class="muted">(${s.email})</span></span></td><td>${s.ip}</td><td>${fmtTime(s.loginAt)}</td><td>${fmtTime(s.lastSeenAt)}</td>
       <td><form class="inline" method="POST" action="/_ob/api/admin/sessions/terminate">
         <input type="hidden" name="sessionId" value="${s.id}">
         <button class="btn danger" type="submit">세션 종료</button>
@@ -787,7 +815,7 @@ function renderSessions(session) {
     const locked = u.lockedUntil && Date.now() < u.lockedUntil;
     const searchKey = `${u.name} ${email}`.toLowerCase();
     return `<tr data-row data-search="${searchKey}" data-dept="${u.dept}">
-      <td><span class="cell-name">${avatar(u.name, 26)} ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
+      <td><span class="cell-name"><span class="person-icon">${ICON.person}</span> ${u.name}${u.role === 'admin' ? ' <span class="tag-ok">관리자</span>' : ''}</span></td>
       <td class="cell-muted">${email}</td>
       <td>${u.dept}</td>
       <td>${locked ? `<span class="tag-warn">잠김 (~${fmtTime(u.lockedUntil)})</span> ${chipForm('/users/unlock', { email }, '잠금 해제', false)}` : '<span class="tag-ok">정상</span>'}</td>
@@ -1040,6 +1068,13 @@ const actions = {
     const required = body.required === '1';
     Object.keys(auth.listUsers()).forEach((email) => auth.setMfaRequired(email, required));
     audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `전체 계정 MFA 필수 ${required ? '설정' : '해제'}` });
+  },
+  'security/mfa-require-dept'(body, session, ip) {
+    const { dept, required } = body;
+    const isRequired = required === '1';
+    const emails = Object.entries(auth.listUsers()).filter(([, u]) => u.dept === dept).map(([email]) => email);
+    emails.forEach((email) => auth.setMfaRequired(email, isRequired));
+    audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: `부서 MFA 필수 ${isRequired ? '설정' : '해제'}: ${dept} (${emails.length}명)` });
   },
   'org/dept-create'(body, session, ip) {
     const dept = (body.dept || '').trim();
