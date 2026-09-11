@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
-const { app, ipcMain, dialog } = require('electron');
+const { app, ipcMain, dialog, shell } = require('electron');
 const { menubar } = require('menubar');
 const WebSocket = require('ws');
 
@@ -229,8 +229,18 @@ ipcMain.handle('connector:register', async (_event, { relayDomain: enteredDomain
     connect();
     return { ok: true, name: result.name };
   } catch (err) {
-    return { ok: false, reason: err.message, needsMfa: !!(err.data && err.data.needsMfa) };
+    return {
+      ok: false,
+      reason: err.message,
+      needsMfa: !!(err.data && err.data.needsMfa),
+      needsEnrollment: !!(err.data && err.data.needsEnrollment),
+      relayDomain: targetDomain,
+    };
   }
+});
+
+ipcMain.handle('connector:openExternal', async (_event, url) => {
+  shell.openExternal(url);
 });
 
 ipcMain.handle('connector:logout', async () => {

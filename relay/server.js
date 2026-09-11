@@ -226,11 +226,10 @@ async function handleInternal(req, res, ctx) {
       res.writeHead(401);
       return res.end('회사코드가 올바르지 않습니다.');
     }
-    const result = auth.registerBridge(body.email, body.password);
+    const result = auth.registerBridge(body.email, body.password, body.totpCode);
     if (!result.ok) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `브릿지 앱 등록 실패: ${result.reason}` });
-      res.writeHead(401, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end(result.reason);
+      return sendJson(res, 401, { reason: result.reason, needsMfa: !!result.needsMfa, needsEnrollment: !!result.needsEnrollment });
     }
     audit.log({ type: 'ADMIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '브릿지 앱 최초 등록' });
     return sendJson(res, 200, { bridgeToken: result.bridgeToken, name: result.user.name, dept: result.user.dept });
@@ -258,7 +257,7 @@ async function handleInternal(req, res, ctx) {
     const result = auth.registerConnector(body.email, body.password, body.totpCode);
     if (!result.ok) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email || '-', service: '-', ip, reason: `커넥터 앱 등록 실패: ${result.reason}` });
-      return sendJson(res, 401, { reason: result.reason, needsMfa: !!result.needsMfa });
+      return sendJson(res, 401, { reason: result.reason, needsMfa: !!result.needsMfa, needsEnrollment: !!result.needsEnrollment });
     }
     audit.log({ type: 'ADMIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '커넥터 앱 로그인' });
     return sendJson(res, 200, { connectorToken: result.connectorToken, name: result.user.name });
@@ -351,6 +350,42 @@ async function handleInternal(req, res, ctx) {
     return res.end();
   }
 
+  // A regular employee's own MFA enrollment (bridge app), separate from the
+  // admin-only route above — any authenticated session may manage its OWN
+  // account's MFA here, nothing else. Handled directly rather than through
+  // admin.actions: that dispatch table's mfa-confirm hardcodes a redirect
+  // back to the admin domain, which a non-admin session can't even reach.
+  if (pathname.startsWith('/_ob/api/portal/')) {
+    const session = auth.getSession(sessionId);
+    if (!session) {
+      res.writeHead(403);
+      return res.end('forbidden');
+    }
+    const actionKey = pathname.replace('/_ob/api/portal/', '');
+    const body = await readFormBody(req);
+    const mfaHome = `https://portal.${DOMAIN}/mfa`;
+    if (actionKey === 'security/mfa-start') {
+      auth.startMfaEnroll(session.email);
+      audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 설정 시작 (포털)' });
+      res.writeHead(302, { Location: mfaHome });
+      return res.end();
+    }
+    if (actionKey === 'security/mfa-confirm') {
+      const result = auth.confirmMfaEnroll(session.email, body.code);
+      audit.log({ type: 'ADMIN', verdict: result.ok ? 'OK' : 'FAIL', user: session.email, service: '-', ip, reason: result.ok ? 'MFA 활성화 완료 (포털)' : `MFA 확인 실패: ${result.reason}` });
+      res.writeHead(302, { Location: `${mfaHome}${result.ok ? '' : '?mfaError=1'}` });
+      return res.end();
+    }
+    if (actionKey === 'security/mfa-disable') {
+      auth.disableMfa(session.email);
+      audit.log({ type: 'ADMIN', verdict: 'OK', user: session.email, service: '-', ip, reason: 'MFA 비활성화 (포털)' });
+      res.writeHead(302, { Location: mfaHome });
+      return res.end();
+    }
+    res.writeHead(404);
+    return res.end('not found');
+  }
+
   res.writeHead(404);
   res.end('not found');
 }
@@ -399,6 +434,7 @@ async function mainHandler(req, res) {
   }
 
   if (label === 'portal') {
+    if (pathname === '/mfa') return sendHtml(res, 200, portal.renderMfaPage(session, Object.fromEntries(parsedUrl.searchParams)));
     return sendHtml(res, 200, portal.renderPortal(session));
   }
 
