@@ -392,7 +392,7 @@ function renderSecurity(session, query) {
             <div style="font-weight:600;margin-bottom:4px">2차 인증 활성화됨</div>
             <div class="muted" style="font-size:13px">커넥터 앱 로그인 시 비밀번호 다음 단계로 Google Authenticator 코드가 필요합니다.</div>
           </div>
-          ${chipForm('/security/mfa-disable', {}, '비활성화', false)}
+          <form class="inline" method="POST" action="/_ob/api/admin/security/mfa-disable"><button class="btn danger" type="submit">비활성화</button></form>
         </div>
       </div>`;
   } else if (status.pending) {
@@ -475,10 +475,6 @@ function renderSecurity(session, query) {
       <div class="table-banner">
         <span class="t-title">계정별 2차 인증 필수 설정</span>
         <span class="t-desc">필수로 지정된 계정은 등록 전까지 커넥터 앱 로그인이 막힙니다.</span>
-      </div>
-      <div style="padding:14px 20px 0;color:var(--muted);font-size:13px">
-        "필수"로 켜면 본인이 [2차 인증] 메뉴에서 직접 등록해야 합니다 — 등록 값(비밀키)은 본인만 보고 관리자에겐 보이지 않습니다.
-        맨 위 ${TENANT_NAME} 스위치로 전체를, 부서 스위치로 그 부서 전체를 한 번에 켜고 끌 수 있습니다.
       </div>
       <div style="overflow-x:auto">
         <table class="data-table" id="mfaTable">
