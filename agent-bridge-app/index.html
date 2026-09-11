@@ -62,8 +62,15 @@
       <input type="email" id="email" placeholder="you@company.com" required>
       <label>비밀번호</label>
       <input type="password" id="password" required>
+      <div id="mfaField" style="display:none">
+        <label>인증 코드 (Google Authenticator, 6자리)</label>
+        <input type="text" id="totpCode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}">
+      </div>
       <button type="submit">인증하고 시작</button>
       <div class="error" id="loginError"></div>
+      <div id="enrollLink" style="display:none;margin-top:8px;text-align:center">
+        <a href="#" id="enrollLinkA" style="font-size:12px;color:var(--blue)">포털에서 2차 인증 등록하기 →</a>
+      </div>
     </form>
   </div>
 
@@ -104,14 +111,29 @@
     const companyCode = document.getElementById('companyCode').value.trim();
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
-    try {
-      await window.bridge.register(relayDomain, companyCode, email, password);
-      refresh();
-    } catch (err) {
-      loginError.textContent = err.message
-        .replace(/^Error invoking remote method[^:]*:\s*/, '')
-        .replace(/^Error:\s*/, '');
+    const totpCode = document.getElementById('totpCode').value.trim();
+    const result = await window.bridge.register(relayDomain, companyCode, email, password, totpCode);
+    if (!result.ok) {
+      loginError.textContent = result.reason;
+      if (result.needsMfa) {
+        document.getElementById('mfaField').style.display = 'block';
+        document.getElementById('totpCode').focus();
+      }
+      const enrollLink = document.getElementById('enrollLink');
+      if (result.needsEnrollment) {
+        document.getElementById('enrollLinkA').href = 'https://portal.' + result.relayDomain + '/mfa';
+        enrollLink.style.display = 'block';
+      } else {
+        enrollLink.style.display = 'none';
+      }
+      return;
     }
+    refresh();
+  });
+
+  document.getElementById('enrollLinkA').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.bridge.openExternal(e.target.href);
   });
 
   function showLogin(message, relayDomain) {

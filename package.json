@@ -4,6 +4,7 @@
   "private": true,
   "description": "OfficeBridge prototype relay (ZTNA gateway)",
   "dependencies": {
+    "qrcode": "^1.5.4",
     "ws": "^8.16.0"
   }
 }

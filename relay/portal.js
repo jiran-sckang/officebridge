@@ -1,6 +1,38 @@
 const policy = require('./policy');
+const auth = require('./auth');
+const mfaUi = require('./mfa-ui');
 const { shell } = require('./theme');
 const { DOMAIN, TENANT_NAME } = require('./config');
+
+function portalTopbar(session, extraLinks = '') {
+  const initial = (session.name || '?').trim().slice(0, 1).toUpperCase();
+  return `
+    <div class="topbar">
+      <div class="brand">Office<span>Bridge</span> <span class="tenant-badge">${TENANT_NAME}</span></div>
+      <details class="user-menu">
+        <summary><span class="avatar">${initial}</span>${session.name}</summary>
+        <div class="menu">
+          <div class="who-line">${session.name} · ${session.dept}</div>
+          ${session.role === 'admin' ? `<a href="https://admin.${DOMAIN}/dashboard">관리자 콘솔</a>` : ''}
+          <a href="/mfa">2차 인증</a>
+          ${extraLinks}
+          <a href="/_ob/logout">로그아웃</a>
+        </div>
+      </details>
+    </div>`;
+}
+
+function renderMfaPage(session, query) {
+  const status = auth.getMfaStatus(session.email);
+  return shell('2차 인증', `
+    ${portalTopbar(session)}
+    <div class="main">
+      <h1>2차 인증(MFA)</h1>
+      ${mfaUi.renderMfaCard(status, query, '/portal', '브릿지 앱')}
+      <div style="margin-top:16px"><a href="/" style="font-size:13px;color:var(--muted)">← 포털로 돌아가기</a></div>
+    </div>
+  `);
+}
 
 function renderPortal(session) {
   const services = policy.getServices();
@@ -21,20 +53,8 @@ function renderPortal(session) {
     })
     .join('');
 
-  const initial = (session.name || '?').trim().slice(0, 1).toUpperCase();
-
   return shell('임직원 포털', `
-    <div class="topbar">
-      <div class="brand">Office<span>Bridge</span> <span class="tenant-badge">${TENANT_NAME}</span></div>
-      <details class="user-menu">
-        <summary><span class="avatar">${initial}</span>${session.name}</summary>
-        <div class="menu">
-          <div class="who-line">${session.name} · ${session.dept}</div>
-          ${session.role === 'admin' ? `<a href="https://admin.${DOMAIN}/dashboard">관리자 콘솔</a>` : ''}
-          <a href="/_ob/logout">로그아웃</a>
-        </div>
-      </details>
-    </div>
+    ${portalTopbar(session)}
     <div class="main">
       <h1>사내 시스템 포털</h1>
       <div class="portal-grid">${cards}</div>
@@ -42,4 +62,4 @@ function renderPortal(session) {
   `);
 }
 
-module.exports = { renderPortal };
+module.exports = { renderPortal, renderMfaPage };

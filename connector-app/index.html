@@ -75,6 +75,9 @@
       </div>
       <button type="submit">로그인 후 터널 시작</button>
       <div class="error" id="loginError"></div>
+      <div id="enrollLink" style="display:none;margin-top:8px;text-align:center">
+        <a href="#" id="enrollLinkA" style="font-size:12px;color:var(--blue)">관리자 포털에서 2차 인증 등록하기 →</a>
+      </div>
     </form>
   </div>
 
@@ -118,9 +121,21 @@
         document.getElementById('mfaField').style.display = 'block';
         document.getElementById('totpCode').focus();
       }
+      const enrollLink = document.getElementById('enrollLink');
+      if (result.needsEnrollment) {
+        document.getElementById('enrollLinkA').href = 'https://admin.' + result.relayDomain + '/security';
+        enrollLink.style.display = 'block';
+      } else {
+        enrollLink.style.display = 'none';
+      }
       return;
     }
     refresh();
+  });
+
+  document.getElementById('enrollLinkA').addEventListener('click', (e) => {
+    e.preventDefault();
+    window.connectorApp.openExternal(e.target.href);
   });
 
   document.getElementById('logoutLink').addEventListener('click', async () => {
