@@ -42,7 +42,15 @@ const CSS = `
   .sidebar a.active { background: var(--blue-tint); color: var(--blue); font-weight: 600; border-left: 3px solid var(--blue); }
   .sidebar a.active svg { opacity: 1; }
   .sidebar .group { padding: 16px 22px 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  .main { flex: 1; padding: 24px 32px; }
+  .main { flex: 1; padding: 24px 32px; display: flex; flex-direction: column; }
+  /* The last data panel on a page (table-panel or card) fills whatever
+     vertical space is left in the viewport instead of sitting at its own
+     content height with a dead gap below it — a handful of rows still looks
+     like a full page, and once real content actually exceeds the viewport
+     the whole page scrolls normally (no separate inner scrollbar). Matched
+     on tag, not class, so a trailing <script> sibling (every table-panel
+     page appends one) never becomes the ":last-child" target instead. */
+  .main > div:last-of-type { flex: 1 1 auto; }
   .breadcrumb { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   .breadcrumb b { color: var(--text); font-weight: 600; }
   h1 { font-size: 20px; margin: 0 0 18px; color: var(--text); }
