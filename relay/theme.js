@@ -225,10 +225,11 @@ function shell(title, bodyHtml) {
 </html>`;
 }
 
-function loginPage({ next = '/', error = '', companyCode = '' } = {}) {
+function loginPage({ next = '/', error = '', companyCode = '', email = '', needsMfa = false } = {}) {
   next = escapeHtml(next);
   error = escapeHtml(error);
   companyCode = escapeHtml(companyCode);
+  email = escapeHtml(email);
 
   return shell('로그인', `
     <div class="center-page">
@@ -239,8 +240,9 @@ function loginPage({ next = '/', error = '', companyCode = '' } = {}) {
         <form method="POST" action="/_ob/login">
           <input type="hidden" name="next" value="${next}">
           <input type="text" name="companyCode" id="companyCode" placeholder="회사코드" value="${companyCode}" required>
-          <input type="email" name="email" id="email" placeholder="이메일" required>
+          <input type="email" name="email" id="email" placeholder="이메일" value="${email}" required>
           <input type="password" name="password" id="password" placeholder="비밀번호" required>
+          ${needsMfa ? `<input type="text" name="totpCode" id="totpCode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="2차 인증 코드 (6자리)" autofocus required>` : ''}
           <button class="btn" style="width:100%" type="submit">로그인</button>
         </form>
       </div>
