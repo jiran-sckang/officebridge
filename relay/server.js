@@ -458,8 +458,58 @@ const server = https.createServer(
 
 const wss = new WebSocket.Server({ noServer: true });
 
+// A logged-in user's own raw byte-stream connection to a "tcp://" service
+// (SSH, RDP, DB clients — anything that isn't HTTP). Auth reuses the exact
+// same session cookie and policy.isAllowed() check as ordinary HTTP access;
+// this is just a different transport for the same authorization model, not
+// a separate one. See relay/tunnel.js's openTcpChannel for the other half.
+function handleSshUpgrade(req, socket, head, parsedUrl) {
+  const serviceName = parsedUrl.searchParams.get('service');
+  const cookies = parseCookies(req.headers.cookie);
+  const session = auth.getSession(cookies[COOKIE_NAME]);
+  const ip = clientIp(req);
+
+  if (!session) {
+    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+    return socket.destroy();
+  }
+  if (!serviceName || !policy.isAllowed(session, serviceName)) {
+    audit.log({ type: 'ACCESS', verdict: 'DENY', user: session.email, service: serviceName || '-', ip, reason: 'TCP 터널 정책 미허용' });
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+    return socket.destroy();
+  }
+  if (!tunnel.servesService(serviceName)) {
+    audit.log({ type: 'SYSTEM', verdict: 'FAIL', user: session.email, service: serviceName, ip, reason: '커넥터 연결 없음' });
+    socket.write('HTTP/1.1 503 Service Unavailable\r\n\r\n');
+    return socket.destroy();
+  }
+
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    tunnel
+      .openTcpChannel(serviceName, {
+        onData: (buf) => { if (ws.readyState === WebSocket.OPEN) ws.send(buf); },
+        onClose: () => ws.close(),
+      })
+      .then((channel) => {
+        audit.log({ type: 'ACCESS', verdict: 'ALLOW', user: session.email, service: serviceName, ip, reason: 'TCP 터널 연결' });
+        ws.on('message', (data) => channel.send(Buffer.isBuffer(data) ? data : Buffer.from(data)));
+        ws.on('close', () => channel.close());
+        ws.on('error', () => channel.close());
+      })
+      .catch((err) => {
+        audit.log({ type: 'SYSTEM', verdict: 'FAIL', user: session.email, service: serviceName, ip, reason: err.message });
+        ws.close(1011, 'upstream unavailable');
+      });
+  });
+}
+
 server.on('upgrade', (req, socket, head) => {
   const parsedUrl = new URL(req.url, 'https://x');
+
+  if (parsedUrl.pathname === '/tunnel/ssh') {
+    return handleSshUpgrade(req, socket, head, parsedUrl);
+  }
+
   if (parsedUrl.pathname !== '/tunnel') {
     socket.destroy();
     return;
