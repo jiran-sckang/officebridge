@@ -12,10 +12,28 @@ const { app, ipcMain, dialog } = require('electron');
 const { menubar } = require('menubar');
 const WebSocket = require('ws');
 
-const RELAY_DOMAIN = process.env.OB_RELAY_DOMAIN || '10-52-249-21.sslip.io';
 const RELAY_PORT = process.env.OB_RELAY_PORT || '443';
 const RECONNECT_MS = 3000;
 const HEARTBEAT_TIMEOUT_MS = 45000;
+
+// Which relay this connector talks to is a per-deployment fact, not
+// something baked into the app at build time — the same installer has to
+// work for every customer's own relay domain. Whatever was entered on the
+// login screen last time is remembered here; only the very first launch
+// (nothing saved yet) falls back to the env var / build-time default below.
+const RELAY_CONFIG_PATH = path.join(app.getPath('userData'), 'relay-config.json');
+function loadRelayDomain() {
+  try {
+    return JSON.parse(fs.readFileSync(RELAY_CONFIG_PATH, 'utf8')).relayDomain;
+  } catch {
+    return null;
+  }
+}
+function saveRelayDomain(domain) {
+  fs.mkdirSync(path.dirname(RELAY_CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(RELAY_CONFIG_PATH, JSON.stringify({ relayDomain: domain }, null, 2));
+}
+let relayDomain = loadRelayDomain() || process.env.OB_RELAY_DOMAIN || '10-52-249-21.sslip.io';
 
 // Local service map (name -> {internalAddress, enabled}) — not sensitive,
 // so it's fine to persist independent of login state, same as the old
@@ -60,7 +78,7 @@ function rewriteLocation(headers, target, service) {
     const loc = new URL(headers.location, target);
     if (loc.hostname === target.hostname) {
       loc.protocol = 'https:';
-      loc.hostname = `${service}.${RELAY_DOMAIN}`;
+      loc.hostname = `${service}.${relayDomain}`;
       loc.port = '';
       return { ...headers, location: loc.toString() };
     }
@@ -102,7 +120,7 @@ function handleRequest(envelope) {
 }
 
 function connect() {
-  const url = `wss://${RELAY_DOMAIN}:${RELAY_PORT}/tunnel?token=${connectorToken}`;
+  const url = `wss://${relayDomain}:${RELAY_PORT}/tunnel?token=${connectorToken}`;
   ws = new WebSocket(url, { rejectUnauthorized: false });
 
   lastHeartbeat = Date.now();
@@ -193,12 +211,19 @@ const mb = menubar({
 
 app.on('before-quit', stopTunnel);
 
-ipcMain.handle('connector:register', async (_event, { companyCode, email, password, totpCode }) => {
+ipcMain.handle('connector:register', async (_event, { relayDomain: enteredDomain, companyCode, email, password, totpCode }) => {
+  // The domain typed on the login screen wins immediately (so this attempt
+  // actually targets it) and is remembered for next launch — see the
+  // relayDomain comment near the top of this file for why it isn't fixed
+  // at build time.
+  const targetDomain = (enteredDomain || '').trim() || relayDomain;
   // Resolved (never thrown) with an {ok:false,...} shape on failure — errors
   // thrown from a handler lose everything but .message crossing the IPC
   // boundary, and we need the needsMfa flag to reach the renderer intact.
   try {
-    const result = await postJson(RELAY_DOMAIN, '/_ob/api/connector/register', { companyCode, email, password, totpCode });
+    const result = await postJson(targetDomain, '/_ob/api/connector/register', { companyCode, email, password, totpCode });
+    relayDomain = targetDomain;
+    saveRelayDomain(relayDomain);
     connectorToken = result.connectorToken;
     operatorName = result.name;
     connect();
@@ -220,7 +245,7 @@ ipcMain.handle('connector:getStatus', async () => {
   if (!connectorToken) {
     const revoked = revokedMessage;
     revokedMessage = null; // shown once
-    return { loggedOut: true, revokedMessage: revoked };
+    return { loggedOut: true, revokedMessage: revoked, relayDomain };
   }
   return {
     operatorName,

@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('connectorApp', {
-  register: (companyCode, email, password, totpCode) => ipcRenderer.invoke('connector:register', { companyCode, email, password, totpCode }),
+  register: (relayDomain, companyCode, email, password, totpCode) => ipcRenderer.invoke('connector:register', { relayDomain, companyCode, email, password, totpCode }),
   logout: () => ipcRenderer.invoke('connector:logout'),
   quit: () => ipcRenderer.invoke('connector:quit'),
   getStatus: () => ipcRenderer.invoke('connector:getStatus'),

@@ -54,6 +54,8 @@
     <div class="brand">OfficeBridge</div>
     <div class="sub">회사코드와 포털 계정으로 최초 1회만 인증하면, 이후로는 로그인 없이 접속됩니다.</div>
     <form id="loginForm">
+      <label>릴레이 도메인</label>
+      <input type="text" id="relayDomain" placeholder="예: 10-52-249-21.sslip.io" required>
       <label>회사코드</label>
       <input type="text" id="companyCode" placeholder="예: AMD" required>
       <label>이메일</label>
@@ -98,11 +100,12 @@
   document.getElementById('loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     loginError.textContent = '';
+    const relayDomain = document.getElementById('relayDomain').value.trim();
     const companyCode = document.getElementById('companyCode').value.trim();
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     try {
-      await window.bridge.register(companyCode, email, password);
+      await window.bridge.register(relayDomain, companyCode, email, password);
       refresh();
     } catch (err) {
       loginError.textContent = err.message
@@ -111,9 +114,11 @@
     }
   });
 
-  function showLogin(message) {
+  function showLogin(message, relayDomain) {
     loginView.style.display = 'block';
     mainView.style.display = 'none';
+    const relayDomainField = document.getElementById('relayDomain');
+    if (!relayDomainField.value) relayDomainField.value = relayDomain || '';
     loginError.textContent = message || '';
   }
 
@@ -149,7 +154,7 @@
       data = { error: err.message };
     }
     if (data.needsAuth) {
-      showLogin(data.revokedMessage);
+      showLogin(data.revokedMessage, data.relayDomain);
       return;
     }
     showMain(data);

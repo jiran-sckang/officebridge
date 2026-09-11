@@ -10,10 +10,24 @@ const https = require('https');
 const { app, ipcMain, shell } = require('electron');
 const { menubar } = require('menubar');
 
-// The relay this app talks to — baked in at build time for this prototype.
-// A real multi-tenant build would resolve this from the company code via a
-// directory service instead of hardcoding one relay.
-const RELAY_DOMAIN = process.env.OB_RELAY_DOMAIN || '10-52-249-21.sslip.io';
+// Which relay this app talks to is entered on the login screen, not baked
+// in at build time — the same installer has to work for every customer's
+// own relay domain. Kept in its own file (separate from bridge-config.json)
+// so logging out doesn't make the app forget it and fall back to the
+// build-time default below, which only matters on a genuinely fresh install.
+const RELAY_CONFIG_PATH = path.join(app.getPath('userData'), 'relay-config.json');
+function loadRelayDomain() {
+  try {
+    return JSON.parse(fs.readFileSync(RELAY_CONFIG_PATH, 'utf8')).relayDomain;
+  } catch {
+    return null;
+  }
+}
+function saveRelayDomain(domain) {
+  fs.mkdirSync(path.dirname(RELAY_CONFIG_PATH), { recursive: true });
+  fs.writeFileSync(RELAY_CONFIG_PATH, JSON.stringify({ relayDomain: domain }, null, 2));
+}
+let defaultRelayDomain = loadRelayDomain() || process.env.OB_RELAY_DOMAIN || '10-52-249-21.sslip.io';
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'bridge-config.json');
 
@@ -100,13 +114,13 @@ async function freshExchange() {
 }
 
 async function exchange() {
-  if (!config) return { needsAuth: true };
+  if (!config) return { needsAuth: true, relayDomain: defaultRelayDomain };
   try {
     const result = await freshExchange();
     return { name: result.name, dept: result.dept, services: result.services };
   } catch (err) {
     if (err.statusCode === 401) {
-      return { needsAuth: true, revokedMessage: '관리자가 접근 권한을 회수했습니다. 다시 로그인해주세요.' };
+      return { needsAuth: true, revokedMessage: '관리자가 접근 권한을 회수했습니다. 다시 로그인해주세요.', relayDomain: defaultRelayDomain };
     }
     return { error: err.message };
   }
@@ -128,9 +142,12 @@ ipcMain.handle('bridge:openService', async (_event, serviceUrl) => {
   await shell.openExternal(enterUrl);
 });
 
-ipcMain.handle('bridge:register', async (_event, { companyCode, email, password }) => {
-  const result = await postJson(RELAY_DOMAIN, '/_ob/api/bridge/register', { companyCode, email, password });
-  config = { relayDomain: RELAY_DOMAIN, bridgeToken: result.bridgeToken };
+ipcMain.handle('bridge:register', async (_event, { relayDomain: enteredDomain, companyCode, email, password }) => {
+  const targetDomain = (enteredDomain || '').trim() || defaultRelayDomain;
+  const result = await postJson(targetDomain, '/_ob/api/bridge/register', { companyCode, email, password });
+  defaultRelayDomain = targetDomain;
+  saveRelayDomain(defaultRelayDomain);
+  config = { relayDomain: targetDomain, bridgeToken: result.bridgeToken };
   saveConfig(config);
   return { name: result.name, dept: result.dept };
 });
