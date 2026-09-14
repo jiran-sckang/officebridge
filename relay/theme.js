@@ -225,11 +225,32 @@ function shell(title, bodyHtml) {
 </html>`;
 }
 
-function loginPage({ next = '/', error = '', companyCode = '', email = '', needsMfa = false } = {}) {
+function loginPage({ next = '/', error = '', companyCode = '', email = '', mfaChallenge = '' } = {}) {
   next = escapeHtml(next);
   error = escapeHtml(error);
   companyCode = escapeHtml(companyCode);
   email = escapeHtml(email);
+
+  // Step two (password already verified): just the code, via the challenge
+  // token — re-showing company code/email/password here would mean typing
+  // the password twice for nothing, since it's not re-checked.
+  if (mfaChallenge) {
+    return shell('2차 인증', `
+      <div class="center-page">
+        <div class="login-box">
+          <h1>OfficeBridge</h1>
+          <div class="sub">2차 인증 코드를 입력하세요</div>
+          ${error ? `<div class="error-box">${error}</div>` : ''}
+          <form method="POST" action="/_ob/login">
+            <input type="hidden" name="next" value="${next}">
+            <input type="hidden" name="mfaChallenge" value="${escapeHtml(mfaChallenge)}">
+            <input type="text" name="totpCode" id="totpCode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="인증 코드 (6자리)" autofocus required>
+            <button class="btn" style="width:100%" type="submit">확인</button>
+          </form>
+        </div>
+      </div>
+    `);
+  }
 
   return shell('로그인', `
     <div class="center-page">
@@ -242,7 +263,6 @@ function loginPage({ next = '/', error = '', companyCode = '', email = '', needs
           <input type="text" name="companyCode" id="companyCode" placeholder="회사코드" value="${companyCode}" required>
           <input type="email" name="email" id="email" placeholder="이메일" value="${email}" required>
           <input type="password" name="password" id="password" placeholder="비밀번호" required>
-          ${needsMfa ? `<input type="text" name="totpCode" id="totpCode" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" placeholder="2차 인증 코드 (6자리)" autofocus required>` : ''}
           <button class="btn" style="width:100%" type="submit">로그인</button>
         </form>
       </div>
