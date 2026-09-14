@@ -15,7 +15,7 @@
     -webkit-user-select: none; user-select: none;
   }
   .header { padding: 14px 16px; border-bottom: 1px solid var(--border); background: #fff; }
-  .brand { font-weight: 700; color: var(--blue); font-size: 14px; }
+  .brand { font-weight: 700; color: var(--blue); font-size: 14px; display: flex; align-items: center; }
   .who { font-size: 12px; color: var(--muted); margin-top: 4px; }
   .list { padding: 8px; overflow-y: auto; max-height: 260px; }
   .item {
@@ -51,7 +51,7 @@
 </head>
 <body>
   <div id="loginView" class="login" style="display:none">
-    <div class="brand">OfficeBridge</div>
+    <div class="brand"><svg width="20" height="14" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;vertical-align:middle;margin-right:6px"><circle cx="66" cy="70" r="42" fill="none" stroke="#1D3FAE" stroke-width="26"/><circle cx="134" cy="70" r="42" fill="none" stroke="#3E63F5" stroke-width="26"/><circle cx="100" cy="53" r="6" fill="#152F8A"/></svg>OfficeBridge</div>
     <div class="sub">회사코드와 포털 계정으로 최초 1회만 인증하면, 이후로는 로그인 없이 접속됩니다.</div>
     <form id="loginForm">
       <label>릴레이 도메인</label>
@@ -76,7 +76,7 @@
 
   <div id="mainView" style="display:none">
     <div class="header">
-      <div class="brand">OfficeBridge</div>
+      <div class="brand"><svg width="20" height="14" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;vertical-align:middle;margin-right:6px"><circle cx="66" cy="70" r="42" fill="none" stroke="#1D3FAE" stroke-width="26"/><circle cx="134" cy="70" r="42" fill="none" stroke="#3E63F5" stroke-width="26"/><circle cx="100" cy="53" r="6" fill="#152F8A"/></svg>OfficeBridge</div>
       <div class="who" id="who">확인 중…</div>
     </div>
     <div class="list" id="list"></div>

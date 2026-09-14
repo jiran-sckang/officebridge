@@ -5,7 +5,9 @@
   "description": "OfficeBridge Agent Bridge — personal desktop client (F-11). Imports a per-employee bridge config and opens allowed internal systems with one click, no separate login.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "package:mac": "electron-packager . \"OfficeBridge\" --platform=darwin --arch=arm64 --out=dist --overwrite --asar=false --icon=assets/icon.icns",
+    "package:win": "electron-packager . \"OfficeBridge\" --platform=win32 --arch=x64 --out=dist --overwrite --asar=false --icon=assets/icon.ico"
   },
   "dependencies": {
     "electron": "^32.0.0",

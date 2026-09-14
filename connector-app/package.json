@@ -5,7 +5,9 @@
   "description": "OfficeBridge Connector — login-gated desktop app. The outbound tunnel only runs while an admin is authenticated.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "package:mac": "electron-packager . \"OfficeBridge Connector\" --platform=darwin --arch=arm64 --out=dist --overwrite --asar=false --icon=assets/icon.icns",
+    "package:win": "electron-packager . \"OfficeBridge Connector\" --platform=win32 --arch=x64 --out=dist --overwrite --asar=false --icon=assets/icon.ico"
   },
   "dependencies": {
     "electron": "^32.0.0",
