@@ -8,7 +8,7 @@ function portalTopbar(session, extraLinks = '') {
   const initial = (session.name || '?').trim().slice(0, 1).toUpperCase();
   return `
     <div class="topbar">
-      <div class="brand">${LOGO_MARK}Office<span>Bridge</span> <span class="tenant-badge">${TENANT_NAME}</span></div>
+      <div class="brand">${LOGO_MARK}<span>Office<span>Bridge</span></span> <span class="tenant-badge">${TENANT_NAME}</span></div>
       <details class="user-menu">
         <summary><span class="avatar">${initial}</span>${session.name}</summary>
         <div class="menu">
