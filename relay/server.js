@@ -133,14 +133,31 @@ async function handleInternal(req, res, ctx) {
 
   if (pathname === '/_ob/login' && req.method === 'POST') {
     const body = await readFormBody(req);
+
+    // Step two of a password-then-code login: the code alone, checked
+    // against whichever email the challenge from step one was issued for.
+    // No company code or password on this request — they were already
+    // verified, and asking again would just mean typing the password twice.
+    if (body.mfaChallenge) {
+      const result = auth.verifyMfaChallenge(body.mfaChallenge, body.totpCode, ip);
+      if (!result.ok) {
+        audit.log({ type: 'LOGIN', verdict: 'FAIL', user: '-', service: '-', ip, reason: result.reason });
+        return sendHtml(res, 401, loginPage({ next: body.next, error: result.reason, mfaChallenge: result.mfaChallenge || '' }));
+      }
+      audit.log({ type: 'LOGIN', verdict: 'OK', user: result.email, service: '-', ip, reason: '로그인 성공' });
+      setCookie(res, result.sessionId);
+      res.writeHead(302, { Location: body.next || `https://portal.${DOMAIN}/` });
+      return res.end();
+    }
+
     if (body.companyCode !== TENANT_NAME) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email, service: '-', ip, reason: '회사코드 불일치' });
       return sendHtml(res, 401, loginPage({ next: body.next, companyCode: body.companyCode, email: body.email, error: '회사코드가 올바르지 않습니다.' }));
     }
-    const result = auth.login(body.email, body.password, ip, body.totpCode);
+    const result = auth.login(body.email, body.password, ip);
     if (!result.ok) {
       audit.log({ type: 'LOGIN', verdict: 'FAIL', user: body.email, service: '-', ip, reason: result.reason });
-      return sendHtml(res, 401, loginPage({ next: body.next, companyCode: body.companyCode, email: body.email, error: result.reason, needsMfa: !!result.needsMfa }));
+      return sendHtml(res, 401, loginPage({ next: body.next, companyCode: body.companyCode, email: body.email, error: result.reason, mfaChallenge: result.mfaChallenge || '' }));
     }
     audit.log({ type: 'LOGIN', verdict: 'OK', user: body.email, service: '-', ip, reason: '로그인 성공' });
     setCookie(res, result.sessionId);

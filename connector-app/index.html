@@ -23,11 +23,17 @@
   .section { padding: 10px 16px 4px; font-size: 11px; color: var(--muted); text-transform: uppercase; }
   .list { padding: 4px 8px; }
   .item {
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
     padding: 8px 8px; border-radius: 6px; margin-bottom: 2px;
   }
+  /* A long internal address (a full Google Sheets URL, say) has no spaces
+     to break on — without min-width:0 the flex item refuses to shrink
+     below its content's natural width, which pushes the ON/삭제 controls
+     on the right clean out of the 320px-wide popup instead of wrapping. */
+  .item > div:first-child { min-width: 0; flex: 1; }
+  .item > div:last-child { flex-shrink: 0; display: flex; align-items: center; }
   .item .name { font-weight: 600; }
-  .item .addr { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+  .item .addr { font-size: 10.5px; color: var(--muted); margin-top: 1px; overflow-wrap: anywhere; }
   .pill { padding: 3px 9px; border-radius: 4px; font-size: 11px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
   .pill.on { background: #e5f3ec; color: var(--ok); border-color: #b7e1c9; }
   .pill.off { background: #f4f4f4; color: var(--muted); }

@@ -104,8 +104,28 @@ function verifyPassword(email, password) {
   return { ok: true, user };
 }
 
-// Returns { ok, sessionId } on success, or { ok: false, reason } on failure.
-function login(email, password, ip, totpCode) {
+// The gap between "password verified" and "code verified" on the web login
+// page — unlike the connector/bridge apps, this is a real page reload
+// between the two steps, so there's no in-memory form state to fall back
+// on for re-checking the password. Rather than ask for it twice, password
+// verification issues one of these short-lived tokens; step two only needs
+// it plus the code. In-memory only (matches `sessions` above) — losing one
+// on a relay restart just means logging in again from the start, same as
+// a normal session getting dropped.
+const mfaChallenges = new Map(); // token -> { email, expiresAt }
+const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1000;
+
+function createMfaChallenge(email) {
+  const token = crypto.randomUUID();
+  mfaChallenges.set(token, { email, expiresAt: Date.now() + MFA_CHALLENGE_TTL_MS });
+  return token;
+}
+
+// Returns { ok, sessionId } on success. On failure: { ok: false, reason },
+// plus { needsMfa: true, mfaChallenge } when the password was right and
+// only the second factor is outstanding — the caller re-shows just the
+// code field, not the whole form.
+function login(email, password, ip) {
   // Admins always keep web access — otherwise turning bridgeOnlyAccess on
   // could lock everyone, including the admin who'd need to turn it back
   // off, out of the console at the same time.
@@ -115,17 +135,34 @@ function login(email, password, ip, totpCode) {
   }
   const result = verifyPassword(email, password);
   if (!result.ok) return result;
-  // Same second-factor check as the connector/bridge apps — but only once
-  // actually enrolled. An account with mfaRequired but no mfaSecret yet
-  // must still be able to log in here, or there'd be no way to ever reach
-  // the enrollment page (/security or /mfa) in the first place.
+  // Only gate the second factor once actually enrolled — an account with
+  // mfaRequired but no mfaSecret yet must still be able to log in here, or
+  // there'd be no way to ever reach the enrollment page (/security or
+  // /mfa) in the first place.
   if (result.user.mfaSecret) {
-    if (!totpCode) return { ok: false, needsMfa: true, reason: 'MFA 인증 코드를 입력해주세요.' };
-    if (!totp.verifyTotp(result.user.mfaSecret, totpCode)) {
-      return { ok: false, needsMfa: true, reason: 'MFA 코드가 올바르지 않습니다.' };
-    }
+    return { ok: false, needsMfa: true, mfaChallenge: createMfaChallenge(email), reason: '2차 인증 코드를 입력해주세요.' };
   }
   return { ok: true, sessionId: createSession(email, ip) };
+}
+
+// Step two of the above: the code alone, checked against whichever email
+// the challenge was issued for — no password re-entry.
+function verifyMfaChallenge(challengeToken, totpCode, ip) {
+  const entry = mfaChallenges.get(challengeToken);
+  if (!entry || Date.now() > entry.expiresAt) {
+    mfaChallenges.delete(challengeToken);
+    return { ok: false, reason: '인증 시간이 만료되었습니다. 처음부터 다시 로그인해주세요.' };
+  }
+  const user = users[entry.email];
+  if (!user || !user.mfaSecret) {
+    mfaChallenges.delete(challengeToken);
+    return { ok: false, reason: '잘못된 요청입니다. 처음부터 다시 로그인해주세요.' };
+  }
+  if (!totpCode || !totp.verifyTotp(user.mfaSecret, totpCode)) {
+    return { ok: false, needsMfa: true, mfaChallenge: challengeToken, reason: 'MFA 코드가 올바르지 않습니다.' };
+  }
+  mfaChallenges.delete(challengeToken);
+  return { ok: true, sessionId: createSession(entry.email, ip), email: entry.email };
 }
 
 // ---- Personal bridge tokens (F-11) --------------------------------------
@@ -437,6 +474,7 @@ module.exports = {
   listUsers,
   createUser,
   login,
+  verifyMfaChallenge,
   getSession,
   destroySession,
   listActiveSessions,
