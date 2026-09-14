@@ -67,7 +67,7 @@ function adminShell(activePath, session, title, bodyHtml) {
 
   return shell(title, `
     <div class="topbar">
-      <div class="brand">${LOGO_MARK}Office<span>Bridge</span> <span class="tenant-badge">${TENANT_NAME} 관리자 콘솔</span></div>
+      <div class="brand">${LOGO_MARK}<span>Office<span>Bridge</span></span> <span class="tenant-badge">관리자 콘솔</span></div>
       <details class="user-menu">
         <summary><span class="avatar">${ICON.company}</span>${session.name}</summary>
         <div class="menu">
