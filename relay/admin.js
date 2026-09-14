@@ -6,7 +6,7 @@ const policy = require('./policy');
 const rules = require('./rules');
 const audit = require('./audit');
 const tunnel = require('./tunnel');
-const { shell } = require('./theme');
+const { shell, LOGO_MARK } = require('./theme');
 const { TENANT_NAME, DOMAIN } = require('./config');
 
 const DOWNLOADS_DIR = path.join(__dirname, '..', 'downloads');
@@ -67,7 +67,7 @@ function adminShell(activePath, session, title, bodyHtml) {
 
   return shell(title, `
     <div class="topbar">
-      <div class="brand">Office<span>Bridge</span> <span class="tenant-badge">${TENANT_NAME} 관리자 콘솔</span></div>
+      <div class="brand">${LOGO_MARK}Office<span>Bridge</span> <span class="tenant-badge">${TENANT_NAME} 관리자 콘솔</span></div>
       <details class="user-menu">
         <summary><span class="avatar">${ICON.company}</span>${session.name}</summary>
         <div class="menu">

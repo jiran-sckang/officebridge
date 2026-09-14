@@ -15,7 +15,7 @@
     -webkit-user-select: none; user-select: none;
   }
   .header { padding: 14px 16px; border-bottom: 1px solid var(--border); background: #fff; }
-  .brand { font-weight: 700; color: var(--blue); font-size: 14px; }
+  .brand { font-weight: 700; color: var(--blue); font-size: 14px; display: flex; align-items: center; }
   .status-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
   .dot.on { background: var(--ok); }
@@ -64,7 +64,7 @@
 </head>
 <body>
   <div id="loginView" class="login" style="display:none">
-    <div class="brand">OfficeBridge Connector</div>
+    <div class="brand"><svg width="20" height="14" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;vertical-align:middle;margin-right:6px"><circle cx="66" cy="70" r="42" fill="none" stroke="#1D3FAE" stroke-width="26"/><circle cx="134" cy="70" r="42" fill="none" stroke="#3E63F5" stroke-width="26"/><circle cx="100" cy="53" r="6" fill="#152F8A"/></svg>OfficeBridge Connector</div>
     <div class="sub">관리자 계정으로 로그인해야 터널이 시작됩니다.</div>
     <form id="loginForm">
       <label>릴레이 도메인</label>
@@ -89,7 +89,7 @@
 
   <div id="mainView" style="display:none">
     <div class="header">
-      <div class="brand">OfficeBridge Connector</div>
+      <div class="brand"><svg width="20" height="14" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;vertical-align:middle;margin-right:6px"><circle cx="66" cy="70" r="42" fill="none" stroke="#1D3FAE" stroke-width="26"/><circle cx="134" cy="70" r="42" fill="none" stroke="#3E63F5" stroke-width="26"/><circle cx="100" cy="53" r="6" fill="#152F8A"/></svg>OfficeBridge Connector</div>
       <div class="status-row"><span class="dot" id="dot"></span><span id="statusText"></span></div>
     </div>
     <div class="section">등록된 서비스</div>

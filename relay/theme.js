@@ -8,7 +8,7 @@ const CSS = `
   body { margin: 0; font-family: 'Pretendard Variable', 'Pretendard', -apple-system, 'Malgun Gothic', 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); }
   a { color: var(--blue); text-decoration: none; }
   .topbar { background: #fff; color: var(--text); padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
-  .topbar .brand { font-weight: 700; font-size: 18px; letter-spacing: .3px; color: var(--blue); }
+  .topbar .brand { font-weight: 700; font-size: 18px; letter-spacing: .3px; color: var(--blue); display: flex; align-items: center; gap: 8px; }
   .topbar .brand span { color: var(--text); }
   .topbar .who { font-size: 13px; color: var(--muted); display: flex; gap: 14px; align-items: center; }
   .topbar .who a { color: var(--blue); }
@@ -135,7 +135,7 @@ const CSS = `
   .portal-card .name { font-weight: 700; margin-top: 10px; color: var(--text); }
   .center-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
   .login-box { background: #fff; padding: 40px; border-radius: 10px; width: 360px; border: 1px solid var(--border); }
-  .login-box h1 { color: var(--blue); font-size: 22px; }
+  .login-box h1 { color: var(--blue); font-size: 22px; display: flex; align-items: center; gap: 10px; }
   .login-box .sub { color: var(--muted); font-size: 13px; margin-bottom: 22px; }
   .error-box { background: #fdeaea; color: var(--deny); padding: 10px 12px; border-radius: 4px; font-size: 13px; margin-bottom: 14px; }
   .block-box { background: #fff; padding: 44px 50px; border-radius: 10px; text-align: center; width: 420px; border: 1px solid var(--border); }
@@ -206,6 +206,16 @@ const CSS = `
   .dept-chip-x:hover { color: var(--deny); }
 `;
 
+// The OfficeBridge mark — two interlocked rings, read as both an infinity
+// loop (seamless, always-on access) and a chain link (bridging two sides).
+// Kept as one shared constant so the web console, portal, and both desktop
+// apps' own markup all draw the exact same shape.
+const LOGO_MARK = `<svg width="28" height="20" viewBox="0 0 200 140" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0" aria-hidden="true">
+  <circle cx="66" cy="70" r="42" fill="none" stroke="#1D3FAE" stroke-width="26"/>
+  <circle cx="134" cy="70" r="42" fill="none" stroke="#3E63F5" stroke-width="26"/>
+  <circle cx="100" cy="53" r="6" fill="#152F8A"/>
+</svg>`;
+
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -238,7 +248,7 @@ function loginPage({ next = '/', error = '', companyCode = '', email = '', mfaCh
     return shell('2차 인증', `
       <div class="center-page">
         <div class="login-box">
-          <h1>OfficeBridge</h1>
+          <h1>${LOGO_MARK}OfficeBridge</h1>
           <div class="sub">2차 인증 코드를 입력하세요</div>
           ${error ? `<div class="error-box">${error}</div>` : ''}
           <form method="POST" action="/_ob/login">
@@ -255,7 +265,7 @@ function loginPage({ next = '/', error = '', companyCode = '', email = '', mfaCh
   return shell('로그인', `
     <div class="center-page">
       <div class="login-box">
-        <h1>OfficeBridge</h1>
+        <h1>${LOGO_MARK}OfficeBridge</h1>
         <div class="sub">VPN 없이 브라우저로 접속</div>
         ${error ? `<div class="error-box">${error}</div>` : ''}
         <form method="POST" action="/_ob/login">
@@ -284,4 +294,4 @@ function blockPage({ code, icon = '🛡️', title, message, detail = '' }) {
   `);
 }
 
-module.exports = { shell, loginPage, blockPage, CSS };
+module.exports = { shell, loginPage, blockPage, CSS, LOGO_MARK };
